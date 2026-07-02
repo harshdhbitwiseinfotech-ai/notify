@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
+import { useLoaderData } from "react-router";
+import { authenticate } from "../shopify.server";
 import {
   Page,
   Layout,
@@ -9,40 +11,76 @@ import {
   Button,
   Modal,
   Text,
-  Spinner,
   Box,
   InlineStack,
   BlockStack,
   List,
 } from "@shopify/polaris";
 
-const Products = () => {
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
+export const loader = async ({ request }) => {
+  const { admin } = await authenticate.admin(request);
+
+  const response = await admin.graphql(
+    `#graphql
+    query getProductsWithInventory {
+      products(first: 50) {
+        edges {
+          node {
+            id
+            title
+            images(first: 1) {
+              edges {
+                node {
+                  url
+                }
+              }
+            }
+            variants(first: 10) {
+              edges {
+                node {
+                  price
+                  inventoryQuantity
+                }
+              }
+            }
+          }
+        }
+      }
+    }`
+  );
+
+  const parsedData = await response.json();
+  const productsNodes = parsedData.data?.products?.edges || [];
+
+  // Normalize data and match with subscription mock data (or future real DB)
+  const products = productsNodes.map(({ node }) => {
+    const variant = node.variants.edges[0]?.node;
+    const inventoryCount = variant?.inventoryQuantity || 0;
+    const price = variant?.price || "0.00";
+    const image = node.images.edges[0]?.node?.url || "https://burst.shopifycdn.com/photos/placeholder-product-image.jpg";
+
+    return {
+      id: node.id,
+      title: node.title,
+      image,
+      price,
+      inventoryCount,
+      inStock: inventoryCount > 0,
+      // Placeholder for subscriptions until DB is fully implemented
+      notifyCount: 0,
+      subscribers: [] 
+    };
+  });
+
+  return { products };
+};
+
+export default function Products() {
+  const { products } = useLoaderData();
 
   // Modal State for viewing subscribers
   const [activeProduct, setActiveProduct] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  // -----------------------------
-  // Fetch products from backend
-  // -----------------------------
-  const fetchProducts = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch("/api/dashboard/products");
-      const data = await res.json();
-      setProducts(data.products || []);
-      setLoading(false);
-    } catch (error) {
-      console.error("Error fetching products:", error);
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchProducts();
-  }, []);
 
   const handleOpenSubscribers = (product) => {
     setActiveProduct(product);
@@ -69,8 +107,8 @@ const Products = () => {
       <IndexTable.Cell>
         <InlineStack gap="300" blockAlign="center">
           <Thumbnail
-            source={product.image || "https://burst.shopifycdn.com/photos/placeholder-product-image.jpg"}
-            alt={product.title || "Product image"}
+            source={product.image}
+            alt={product.title}
             size="small"
           />
           <Text variant="bodyMd" fontWeight="semibold" as="span">
@@ -111,9 +149,6 @@ const Products = () => {
     </IndexTable.Row>
   ));
 
-  // -----------------------------
-  // UI
-  // -----------------------------
   return (
     <Page
       title="📦 Products Management"
@@ -123,13 +158,7 @@ const Products = () => {
       <Layout>
         <Layout.Section>
           <Card padding="0">
-            {loading ? (
-              <Box padding="800">
-                <InlineStack align="center">
-                  <Spinner size="large" hasFocusableParent={false} />
-                </InlineStack>
-              </Box>
-            ) : products.length === 0 ? (
+            {products.length === 0 ? (
               <Box padding="800">
                 <BlockStack inlineAlign="center" gap="200">
                   <Text variant="headingMd" as="p" tone="subdued">
@@ -161,7 +190,7 @@ const Products = () => {
       <Modal
         open={isModalOpen}
         onClose={handleCloseSubscribers}
-        title={activeProduct ? `Subscribers for ${activeProduct.title}` : "Subscribers"}
+        title={activeProduct ? "Subscribers for " + activeProduct.title : "Subscribers"}
         primaryAction={{
           content: "Close",
           onAction: handleCloseSubscribers,
@@ -196,6 +225,4 @@ const Products = () => {
       </Modal>
     </Page>
   );
-};
-
-export default Products;
+}
