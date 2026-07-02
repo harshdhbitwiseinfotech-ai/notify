@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 import {
@@ -15,7 +15,9 @@ import {
   InlineStack,
   BlockStack,
   List,
+  TextField,
 } from "@shopify/polaris";
+import { ArrowLeftIcon, SearchIcon } from "@shopify/polaris-icons";
 
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
@@ -81,6 +83,18 @@ export default function Products() {
   // Modal State for viewing subscribers
   const [activeProduct, setActiveProduct] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
+
+  const visibleProducts = useMemo(() => {
+    if (!searchText.trim()) {
+      return products;
+    }
+
+    const query = searchText.toLowerCase();
+    return products.filter((product) =>
+      product.title.toLowerCase().includes(query)
+    );
+  }, [products, searchText]);
 
   const handleOpenSubscribers = (product) => {
     setActiveProduct(product);
@@ -97,7 +111,7 @@ export default function Products() {
     plural: "products",
   };
 
-  const rowMarkup = (products || []).map((product, index) => (
+  const rowMarkup = (visibleProducts || []).map((product, index) => (
     <IndexTable.Row 
       id={product.id?.toString() || index.toString()} 
       key={product.id || index} 
@@ -151,14 +165,42 @@ export default function Products() {
 
   return (
     <Page
-      title="📦 Products Management"
-      subtitle="Track stock status and notify requests"
-      backAction={{ content: "Dashboard", url: "/app" }}
+      title="Products"
+      subtitle="Monitor stock availability and customer notify requests"
+      backAction={{ content: "Dashboard", url: "/app", icon: ArrowLeftIcon }}
+      compact
+      titleAlignment="left"
     >
       <Layout>
         <Layout.Section>
           <Card padding="0">
-            {products.length === 0 ? (
+            <Box padding="400">
+              <InlineStack blockAlign="center" align="space-between" gap="400">
+                <BlockStack spacing="tight">
+                  <Text as="h1" variant="headingMd" style={{ fontSize: "18px" }}>
+                    Products management
+                  </Text>
+                  <Text as="bodyMd" tone="subdued" style={{ fontSize: "14px" }}>
+                    Search products and monitor stock availability.
+                  </Text>
+                </BlockStack>
+                <Box width="320px">
+                  <TextField
+                    label="Search products"
+                    labelHidden
+                    type="search"
+                    value={searchText}
+                    onChange={setSearchText}
+                    clearButton
+                    onClearButtonClick={() => setSearchText("")}
+                    placeholder="Search product name"
+                    autoComplete="off"
+                    prefix={<SearchIcon />}
+                  />
+                </Box>
+              </InlineStack>
+            </Box>
+            {visibleProducts.length === 0 ? (
               <Box padding="800">
                 <BlockStack inlineAlign="center" gap="200">
                   <Text variant="headingMd" as="p" tone="subdued">
@@ -169,7 +211,7 @@ export default function Products() {
             ) : (
               <IndexTable
                 resourceName={resourceName}
-                itemCount={products.length}
+                itemCount={visibleProducts.length}
                 selectable={false}
                 headings={[
                   { title: "Product" },
