@@ -18,8 +18,9 @@ import {
   TextField,
 } from "@shopify/polaris";
 import { ArrowLeftIcon, SearchIcon } from "@shopify/polaris-icons";
+import { Icon } from "@shopify/polaris";
 
-export const loader = async ({ request }) => {
+export const loader = async ({ request }) => {  
   const { admin } = await authenticate.admin(request);
 
   const response = await admin.graphql(
@@ -70,7 +71,7 @@ export const loader = async ({ request }) => {
       inStock: inventoryCount > 0,
       // Placeholder for subscriptions until DB is fully implemented
       notifyCount: 0,
-      subscribers: [] 
+      subscribers: []
     };
   });
 
@@ -84,6 +85,13 @@ export default function Products() {
   const [activeProduct, setActiveProduct] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
+
+  // configurable sizes (pixels)
+  const [titleSize, setTitleSize] = useState(28);
+  const [subtitleSize, setSubtitleSize] = useState(14);
+  const [backIconSize, setBackIconSize] = useState(20);
+  const [buttonBgColor, setButtonBgColor] = useState("#fffbfb23");
+  const [buttonTextColor, setButtonTextColor] = useState("#b66f05dc");
 
   const visibleProducts = useMemo(() => {
     if (!searchText.trim()) {
@@ -112,9 +120,9 @@ export default function Products() {
   };
 
   const rowMarkup = (visibleProducts || []).map((product, index) => (
-    <IndexTable.Row 
-      id={product.id?.toString() || index.toString()} 
-      key={product.id || index} 
+    <IndexTable.Row
+      id={product.id?.toString() || index.toString()}
+      key={product.id || index}
       position={index}
     >
       {/* Product Image and Title */}
@@ -156,9 +164,20 @@ export default function Products() {
 
       {/* Actions */}
       <IndexTable.Cell>
-        <Button onClick={() => handleOpenSubscribers(product)}>
+        <button onClick={() => handleOpenSubscribers(product)}
+          style={{
+            backgroundColor: buttonBgColor,
+            color: buttonTextColor,
+            border: "1px solid #000000",
+            borderRadius: "8px",
+            padding: "8px 16px",
+            cursor: "pointer",
+            fontWeight: 500,
+            fontSize: "14px",
+          }}
+        >
           View Subscribers
-        </Button>
+        </button>
       </IndexTable.Cell>
     </IndexTable.Row>
   ));
@@ -177,10 +196,10 @@ export default function Products() {
             <Box padding="400">
               <InlineStack blockAlign="center" align="space-between" gap="400">
                 <BlockStack spacing="tight">
-                  <Text as="h1" variant="headingMd" style={{ fontSize: "18px" }}>
+                  <Text as="h1" variant="headingLg" fontWeight="bold">
                     Products management
                   </Text>
-                  <Text as="bodyMd" tone="subdued" style={{ fontSize: "14px" }}>
+                  <Text as="bodyMd" tone="subdued" fontWeight="regular">
                     Search products and monitor stock availability.
                   </Text>
                 </BlockStack>
@@ -195,7 +214,7 @@ export default function Products() {
                     onClearButtonClick={() => setSearchText("")}
                     placeholder="Search product name"
                     autoComplete="off"
-                    prefix={<SearchIcon />}
+                    prefix={<Icon source={SearchIcon} />}
                   />
                 </Box>
               </InlineStack>
