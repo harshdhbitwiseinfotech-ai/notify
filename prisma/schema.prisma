@@ -32,3 +32,21 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+model BackInStockSubscriber {
+  id           String    @id @default(cuid())
+  shop         String
+  email        String
+  productId    String
+  variantId    String
+  productTitle String
+  variantTitle String    @default("")
+  notified     Boolean   @default(false)
+  notifiedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([shop, email, variantId])
+  @@index([shop, productId])
+  @@index([shop, notified])
+}

@@ -1,0 +1,207 @@
+{% comment %}
+  Back In Stock — Product Page App Block
+  File: extensions/back-in-stock-button/blocks/notify-me-button.liquid
+
+  Place this block on the Product page in the Theme Editor.
+  It renders ONLY when every variant of the product is out of stock.
+  When at least one variant is available it hides itself automatically.
+{% endcomment %}
+
+{% assign product_available = false %}
+{% for variant in product.variants %}
+  {% if variant.available %}
+    {% assign product_available = true %}
+    {% break %}
+  {% endif %}
+{% endfor %}
+
+{% if product_available == false %}
+
+  {%- liquid
+    assign api_url   = shop.metafields.back_in_stock.api_url | default: ''
+    assign shop_host = shop.permanent_domain
+    assign first_variant = product.selected_or_first_available_variant
+    assign product_gid   = product.id | prepend: 'gid://shopify/Product/'
+    assign variant_gid   = first_variant.id | prepend: 'gid://shopify/ProductVariant/'
+  -%}
+
+  {{- 'back-in-stock.css' | asset_url | stylesheet_tag -}}
+
+  {%- comment -%} ── Notify Me Button ────────────────────────────────────── {%- endcomment -%}
+  <div class="bis-product-block" style="margin-top: 12px;">
+    <button
+      type="button"
+      class="bis-notify-btn bis-open-modal"
+      aria-haspopup="dialog"
+      aria-label="Get notified when {{ product.title | escape }} is back in stock"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+           aria-hidden="true">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+      </svg>
+      {{ block.settings.button_label | default: 'Notify Me When Available' }}
+    </button>
+  </div>
+
+  {%- comment -%} ── Modal Overlay ───────────────────────────────────────── {%- endcomment -%}
+  <div
+    id="bis-overlay"
+    class="bis-overlay"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="bis-modal-title"
+    data-product-id="{{ product_gid | escape }}"
+    data-product-title="{{ product.title | escape }}"
+    data-variant-id="{{ variant_gid | escape }}"
+    data-variant-title="{{ first_variant.title | escape }}"
+    data-shop="{{ shop_host | escape }}"
+    data-api-url="{{ block.settings.api_url | default: '' | escape }}"
+  >
+    <div class="bis-modal">
+      {%- comment -%} Close button {%- endcomment -%}
+      <button class="bis-close" aria-label="Close" title="Close">&times;</button>
+
+      {%- comment -%} Icon {%- endcomment -%}
+      <div class="bis-modal__icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+      </div>
+
+      <h2 id="bis-modal-title" class="bis-modal__title">
+        {{ block.settings.modal_title | default: "Back In Stock Notification" }}
+      </h2>
+      <p class="bis-modal__subtitle">
+        {{ block.settings.modal_subtitle | default: "Enter your email and we'll notify you the moment this product is available again." }}
+      </p>
+
+      {%- comment -%} Product preview row {%- endcomment -%}
+      <div class="bis-modal__product">
+        {%- if product.featured_image -%}
+          <img
+            class="bis-modal__product-img"
+            src="{{ product.featured_image | img_url: '80x80', crop: 'center' }}"
+            alt="{{ product.title | escape }}"
+            width="48"
+            height="48"
+            loading="lazy"
+          >
+        {%- endif -%}
+        <div class="bis-modal__product-info">
+          <div class="bis-modal__product-title">{{ product.title | escape }}</div>
+          <div class="bis-modal__product-variant">{{ first_variant.title | escape }}</div>
+        </div>
+      </div>
+
+      {%- comment -%} Form section {%- endcomment -%}
+      <div class="bis-form-section">
+        <form id="bis-form" class="bis-form" novalidate>
+          {%- comment -%} Hidden fields carry product data to JS {%- endcomment -%}
+          <input type="hidden" id="bis-product-id"    name="productId"    value="{{ product_gid | escape }}">
+          <input type="hidden" id="bis-variant-id"    name="variantId"    value="{{ variant_gid | escape }}">
+          <input type="hidden" id="bis-product-title" name="productTitle" value="{{ product.title | escape }}">
+          <input type="hidden" id="bis-variant-title" name="variantTitle" value="{{ first_variant.title | escape }}">
+
+          <div>
+            <label for="bis-email" class="bis-form__label">Email Address</label>
+            <input
+              type="email"
+              id="bis-email"
+              name="email"
+              class="bis-form__input"
+              placeholder="you@example.com"
+              autocomplete="email"
+              required
+            >
+            <p id="bis-email-error" class="bis-form__error">
+              Please enter a valid email address.
+            </p>
+          </div>
+
+          <p class="bis-form-error-msg" style="color:#d82c0d;font-size:13px;display:none;"></p>
+
+          <button type="submit" class="bis-form__submit">
+            <span class="bis-spinner" style="display:none;"></span>
+            <span class="bis-btn-text">
+              {{ block.settings.submit_label | default: "Notify Me" }}
+            </span>
+          </button>
+        </form>
+
+        <p class="bis-privacy">
+          {{ block.settings.privacy_text | default: "We respect your privacy. No spam, just a single restock alert." }}
+        </p>
+      </div>
+
+      {%- comment -%} Success state {%- endcomment -%}
+      <div class="bis-success">
+        <div class="bis-success__icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+               aria-hidden="true">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </div>
+        <h3 class="bis-success__title">You're on the list! 🎉</h3>
+        <p class="bis-success__message">
+          We'll send a notification to <strong><span class="bis-success__email"></span></strong>
+          as soon as <strong>{{ product.title | escape }}</strong> is restocked.
+        </p>
+        <button type="button" class="bis-success__close-btn">Got it</button>
+      </div>
+
+    </div>{%- comment -%} .bis-modal {%- endcomment -%}
+  </div>{%- comment -%} .bis-overlay {%- endcomment -%}
+
+  <script src="{{ 'back-in-stock.js' | asset_url }}" defer></script>
+
+{% endif %}
+
+{% schema %}
+{
+  "name": "Back In Stock",
+  "target": "section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "button_label",
+      "label": "Button Label",
+      "default": "Notify Me When Available"
+    },
+    {
+      "type": "text",
+      "id": "modal_title",
+      "label": "Modal Title",
+      "default": "Back In Stock Notification"
+    },
+    {
+      "type": "text",
+      "id": "modal_subtitle",
+      "label": "Modal Subtitle",
+      "default": "Enter your email and we'll notify you the moment this product is available again."
+    },
+    {
+      "type": "text",
+      "id": "submit_label",
+      "label": "Submit Button Label",
+      "default": "Notify Me"
+    },
+    {
+      "type": "text",
+      "id": "privacy_text",
+      "label": "Privacy Note",
+      "default": "We respect your privacy. No spam, just a single restock alert."
+    },
+    {
+      "type": "url",
+      "id": "api_url",
+      "label": "API URL (leave blank to use app proxy)"
+    }
+  ]
+}
+{% endschema %}

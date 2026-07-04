@@ -1,0 +1,206 @@
+{% comment %}
+  Back In Stock — Collection Card Snippet
+  File: extensions/back-in-stock-button/snippets/notify-me-card.liquid
+
+  Usage — add this inside your product card template (e.g. snippets/card-product.liquid
+  or sections/main-collection-product-grid.liquid) right after the "Sold out" badge:
+
+      {% unless card_product.available %}
+        {% render 'notify-me-card', product: card_product %}
+      {% endunless %}
+
+  The button opens a compact version of the Notify Me modal.
+  The modal and its JS/CSS are injected once on the page by the App Block on
+  the product page; on collection pages we render a standalone lightweight modal.
+{% endcomment %}
+
+{%- liquid
+  assign first_variant  = product.selected_or_first_available_variant
+  assign product_gid    = product.id    | prepend: 'gid://shopify/Product/'
+  assign variant_gid    = first_variant.id | prepend: 'gid://shopify/ProductVariant/'
+  assign modal_id       = 'bis-card-overlay-' | append: product.id
+  assign shop_host      = shop.permanent_domain
+-%}
+
+{{- 'back-in-stock.css' | asset_url | stylesheet_tag -}}
+
+<div class="bis-card-wrapper" style="margin-top:6px; text-align:center;">
+  <button
+    type="button"
+    class="bis-card-btn"
+    aria-haspopup="dialog"
+    aria-label="Notify me when {{ product.title | escape }} is back in stock"
+    onclick="document.getElementById('{{ modal_id }}').classList.add('is-open'); document.body.style.overflow='hidden';"
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+         aria-hidden="true" style="width:12px;height:12px;">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+      <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+    </svg>
+    Notify Me
+  </button>
+</div>
+
+{%- comment -%} ── Standalone per-card modal (no JS dependency) ──────────────── {%- endcomment -%}
+<div
+  id="{{ modal_id }}"
+  class="bis-overlay"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="{{ modal_id }}-title"
+  style="z-index:9999;"
+  onclick="if(event.target===this){this.classList.remove('is-open');document.body.style.overflow='';}"
+>
+  <div class="bis-modal">
+    <button
+      class="bis-close"
+      aria-label="Close"
+      onclick="document.getElementById('{{ modal_id }}').classList.remove('is-open'); document.body.style.overflow='';"
+    >&times;</button>
+
+    <div class="bis-modal__icon">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+           aria-hidden="true">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+      </svg>
+    </div>
+
+    <h2 id="{{ modal_id }}-title" class="bis-modal__title">Back In Stock Notification</h2>
+    <p class="bis-modal__subtitle">
+      We'll email you as soon as this item is available again.
+    </p>
+
+    {%- comment -%} Product preview {%- endcomment -%}
+    <div class="bis-modal__product">
+      {%- if product.featured_image -%}
+        <img
+          class="bis-modal__product-img"
+          src="{{ product.featured_image | img_url: '80x80', crop: 'center' }}"
+          alt="{{ product.title | escape }}"
+          width="48" height="48" loading="lazy"
+        >
+      {%- endif -%}
+      <div class="bis-modal__product-info">
+        <div class="bis-modal__product-title">{{ product.title | escape }}</div>
+        <div class="bis-modal__product-variant">{{ first_variant.title | escape }}</div>
+      </div>
+    </div>
+
+    {%- comment -%} Form section {%- endcomment -%}
+    <div class="bis-form-section" id="{{ modal_id }}-form-section">
+      <form
+        class="bis-form"
+        id="{{ modal_id }}-form"
+        novalidate
+        onsubmit="bisCardSubmit(event, '{{ modal_id }}', '{{ shop_host | escape }}', '{{ product_gid | escape }}', '{{ variant_gid | escape }}', {{ product.title | json }}, {{ first_variant.title | json }})"
+      >
+        <div>
+          <label for="{{ modal_id }}-email" class="bis-form__label">Email Address</label>
+          <input
+            type="email"
+            id="{{ modal_id }}-email"
+            name="email"
+            class="bis-form__input"
+            placeholder="you@example.com"
+            autocomplete="email"
+            required
+          >
+          <p id="{{ modal_id }}-email-error" class="bis-form__error">
+            Please enter a valid email address.
+          </p>
+        </div>
+
+        <p id="{{ modal_id }}-api-error" style="color:#d82c0d;font-size:13px;display:none;"></p>
+
+        <button type="submit" class="bis-form__submit" id="{{ modal_id }}-submit">
+          <span class="bis-spinner" id="{{ modal_id }}-spinner" style="display:none;"></span>
+          <span id="{{ modal_id }}-btn-text">Notify Me</span>
+        </button>
+      </form>
+      <p class="bis-privacy">We respect your privacy. One email only.</p>
+    </div>
+
+    {%- comment -%} Success state {%- endcomment -%}
+    <div class="bis-success" id="{{ modal_id }}-success">
+      <div class="bis-success__icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </div>
+      <h3 class="bis-success__title">You're on the list! 🎉</h3>
+      <p class="bis-success__message">
+        We'll notify you at <strong><span id="{{ modal_id }}-success-email"></span></strong>
+        when <strong>{{ product.title | escape }}</strong> is back.
+      </p>
+      <button
+        type="button"
+        class="bis-success__close-btn"
+        onclick="document.getElementById('{{ modal_id }}').classList.remove('is-open'); document.body.style.overflow='';"
+      >Got it</button>
+    </div>
+  </div>
+</div>
+
+{%- comment -%} Inline submit handler (no external JS dependency for card modal) {%- endcomment -%}
+<script>
+(function() {
+  if (window.bisCardSubmitDefined) return;
+  window.bisCardSubmitDefined = true;
+
+  window.bisCardSubmit = async function(e, modalId, shop, productId, variantId, productTitle, variantTitle) {
+    e.preventDefault();
+    var emailInput  = document.getElementById(modalId + '-email');
+    var emailError  = document.getElementById(modalId + '-email-error');
+    var apiError    = document.getElementById(modalId + '-api-error');
+    var submitBtn   = document.getElementById(modalId + '-submit');
+    var spinner     = document.getElementById(modalId + '-spinner');
+    var btnText     = document.getElementById(modalId + '-btn-text');
+    var formSection = document.getElementById(modalId + '-form-section');
+    var successSec  = document.getElementById(modalId + '-success');
+    var successEmail= document.getElementById(modalId + '-success-email');
+
+    var email = emailInput ? emailInput.value.trim() : '';
+    var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      if (emailInput) emailInput.classList.add('has-error');
+      if (emailError) emailError.classList.add('is-visible');
+      return;
+    }
+    if (emailInput) emailInput.classList.remove('has-error');
+    if (emailError) emailError.classList.remove('is-visible');
+    if (apiError) apiError.style.display = 'none';
+
+    if (submitBtn) submitBtn.disabled = true;
+    if (spinner)   spinner.style.display = 'inline-block';
+    if (btnText)   btnText.textContent = 'Subscribing…';
+
+    try {
+      var apiUrl = window.BIS_API_URL || '/apps/back-in-stock/api/notify-me';
+      var res = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shop: shop, email: email, productId: productId, variantId: variantId, productTitle: productTitle, variantTitle: variantTitle })
+      });
+      var json = await res.json();
+      if (res.ok && json.success) {
+        if (formSection) formSection.style.display = 'none';
+        if (successSec)  successSec.classList.add('is-visible');
+        if (successEmail) successEmail.textContent = email;
+      } else {
+        if (apiError) { apiError.textContent = json.error || 'Something went wrong.'; apiError.style.display = 'block'; }
+      }
+    } catch(err) {
+      if (apiError) { apiError.textContent = 'Network error. Please try again.'; apiError.style.display = 'block'; }
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+      if (spinner)   spinner.style.display = 'none';
+      if (btnText)   btnText.textContent = 'Notify Me';
+    }
+  };
+})();
+</script>
