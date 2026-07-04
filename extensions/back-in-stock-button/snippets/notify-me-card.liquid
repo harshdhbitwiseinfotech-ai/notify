@@ -78,7 +78,7 @@
       {%- if product.featured_image -%}
         <img
           class="bis-modal__product-img"
-          src="{{ product.featured_image | img_url: '80x80', crop: 'center' }}"
+          src="{{ product.featured_image | img_url: '80x80', crop: 'center' }}" 
           alt="{{ product.title | escape }}"
           width="48" height="48" loading="lazy"
         >

@@ -29,7 +29,11 @@ const Dashboard = () => {
     try {
       setLoading(true);
 
-      const res = await fetch("/api/dashboard/summary");
+      // Fetch directly from the Express backend
+      const urlParams = new URLSearchParams(window.location.search);
+      const shop = urlParams.get('shop') || window?.shopify?.config?.shop || '';
+      
+      const res = await fetch(`http://localhost:5000/api/dashboard/summary?shop=${shop}`);
       const data = await res.json();
 
       setStats(data.stats);

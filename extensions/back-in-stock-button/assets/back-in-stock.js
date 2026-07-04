@@ -21,6 +21,23 @@
   let currentProductId = null;
   let currentProductTitle = null;
   let currentVariantTitle = null;
+  let productVariantsData = [];
+
+  // ── UI Helpers ─────────────────────────────────────────────────────────────
+  function updateButtonVisibility(variantId) {
+    const btnBlock = document.getElementById("bis-product-block");
+    if (!btnBlock) return;
+    
+    // Find variant in data
+    const variant = productVariantsData.find(v => String(v.id) === String(variantId));
+    if (variant) {
+      if (variant.available) {
+        btnBlock.style.display = "none";
+      } else {
+        btnBlock.style.display = ""; // restore default block/flex
+      }
+    }
+  }
 
   // ── DOM Helpers ────────────────────────────────────────────────────────────
   function $(selector, root) {
@@ -256,6 +273,14 @@
     currentVariantId = overlay.dataset.variantId || readCurrentVariant() || "";
     currentVariantTitle = overlay.dataset.variantTitle || readVariantTitle() || "";
 
+    // Load variant data
+    const dataEl = document.getElementById("bis-variants-data");
+    if (dataEl) {
+      try {
+        productVariantsData = JSON.parse(dataEl.textContent);
+      } catch(e) {}
+    }
+
     // Close on overlay background click
     overlay.addEventListener("click", function (e) {
       if (e.target === overlay) closeModal();
@@ -298,15 +323,30 @@
       if (variant) {
         currentVariantId = String(variant.id);
         currentVariantTitle = variant.title || "";
+        updateButtonVisibility(currentVariantId);
       }
     });
 
     // Also watch select changes
-    document.querySelectorAll('select[name="id"]').forEach((sel) => {
+    document.querySelectorAll('select[name="id"], input[name="id"]').forEach((sel) => {
       sel.addEventListener("change", function () {
         currentVariantId = this.value;
+        updateButtonVisibility(currentVariantId);
       });
     });
+
+    // URL polling fallback for themes that don't fire events or we don't catch their input changes
+    let lastUrl = location.href;
+    setInterval(() => {
+      if (location.href !== lastUrl) {
+        lastUrl = location.href;
+        const newVariantId = readCurrentVariant();
+        if (newVariantId && newVariantId !== currentVariantId) {
+          currentVariantId = newVariantId;
+          updateButtonVisibility(currentVariantId);
+        }
+      }
+    }, 500);
   }
 
   // ── Boot ───────────────────────────────────────────────────────────────────

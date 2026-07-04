@@ -1,21 +1,21 @@
-{% comment %}
+
   Back In Stock — Product Page App Block
   File: extensions/back-in-stock-button/blocks/notify-me-button.liquid
 
   Place this block on the Product page in the Theme Editor.
   It renders ONLY when every variant of the product is out of stock.
   When at least one variant is available it hides itself automatically.
-{% endcomment %}
 
-{% assign product_available = false %}
+
+{% assign has_unavailable_variant = false %}
 {% for variant in product.variants %}
-  {% if variant.available %}
-    {% assign product_available = true %}
+  {% unless variant.available %}
+    {% assign has_unavailable_variant = true %}
     {% break %}
-  {% endif %}
+  {% endunless %}
 {% endfor %}
 
-{% if product_available == false %}
+{% if has_unavailable_variant %}
 
   {%- liquid
     assign api_url   = shop.metafields.back_in_stock.api_url | default: ''
@@ -25,10 +25,21 @@
     assign variant_gid   = first_variant.id | prepend: 'gid://shopify/ProductVariant/'
   -%}
 
+  <script type="application/json" id="bis-variants-data">
+    [
+      {% for variant in product.variants %}
+        {
+          "id": {{ variant.id | json }},
+          "available": {{ variant.available | json }}
+        }{% unless forloop.last %},{% endunless %}
+      {% endfor %}
+    ]
+  </script>
+
   {{- 'back-in-stock.css' | asset_url | stylesheet_tag -}}
 
   {%- comment -%} ── Notify Me Button ────────────────────────────────────── {%- endcomment -%}
-  <div class="bis-product-block" style="margin-top: 12px;">
+  <div id="bis-product-block" class="bis-product-block" style="margin-top: 12px; {% if first_variant.available %}display: none;{% endif %}">
     <button
       type="button"
       class="bis-notify-btn bis-open-modal"
