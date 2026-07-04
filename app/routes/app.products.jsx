@@ -184,11 +184,7 @@ export default function Products() {
 
   return (
     <Page
-      title="Products"
-      subtitle="Monitor stock availability and customer notify requests"
-      backAction={{ content: "Dashboard", url: "/app", icon: ArrowLeftIcon }}
-      compact
-      titleAlignment="left"
+      title={ <Text variant="headingXl" as="h1"> Products </Text>}
     >
       <Layout>
         <Layout.Section>
@@ -196,7 +192,7 @@ export default function Products() {
             <Box padding="400">
               <InlineStack blockAlign="center" align="space-between" gap="400">
                 <BlockStack spacing="tight">
-                  <Text as="h1" variant="headingLg" fontWeight="bold">
+                  <Text as="h3" variant="headingLg" fontWeight="bold">
                     Products management
                   </Text>
                   <Text as="bodyMd" tone="subdued" fontWeight="regular">
