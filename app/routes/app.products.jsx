@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 import {
   Page,
   Layout,
@@ -20,9 +21,8 @@ import {
 import { ArrowLeftIcon, SearchIcon } from "@shopify/polaris-icons";
 import { Icon } from "@shopify/polaris";
 
-export const loader = async ({ request }) => {  
+export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
-
   const response = await admin.graphql(
     `#graphql
     query getProductsWithInventory {
@@ -55,12 +55,22 @@ export const loader = async ({ request }) => {
   const parsedData = await response.json();
   const productsNodes = parsedData.data?.products?.edges || [];
 
-  // Normalize data and match with subscription mock data (or future real DB)
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
+
+  // Fetch all subscribers for this shop from real database
+  const allSubscribers = await prisma.backInStockSubscriber.findMany({
+    where: { shop },
+  });
+
+  // Normalize data and match with subscription real data
   const products = productsNodes.map(({ node }) => {
     const variant = node.variants.edges[0]?.node;
     const inventoryCount = variant?.inventoryQuantity || 0;
     const price = variant?.price || "0.00";
     const image = node.images.edges[0]?.node?.url || "https://burst.shopifycdn.com/photos/placeholder-product-image.jpg";
+
+    const productSubscribers = allSubscribers.filter(sub => sub.productId === node.id);
 
     return {
       id: node.id,
@@ -69,9 +79,8 @@ export const loader = async ({ request }) => {
       price,
       inventoryCount,
       inStock: inventoryCount > 0,
-      // Placeholder for subscriptions until DB is fully implemented
-      notifyCount: 0,
-      subscribers: []
+      notifyCount: productSubscribers.length,
+      subscribers: productSubscribers
     };
   });
 
