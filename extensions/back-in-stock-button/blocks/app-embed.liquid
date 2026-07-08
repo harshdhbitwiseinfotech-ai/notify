@@ -1,0 +1,16 @@
+{% if request.page_type == 'product' %}
+  <script>
+    window.BIS = window.BIS || {};
+    window.BIS.product = {{ product | json }};
+    window.BIS.currentVariant = {{ product.selected_or_first_available_variant | json }};
+  </script>
+  <script src="{{ 'back-in-stock.js' | asset_url }}" defer></script>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Back In Stock (Global)",
+  "target": "body",
+  "settings": []
+}
+{% endschema %}

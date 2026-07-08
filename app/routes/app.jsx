@@ -20,7 +20,6 @@ export const loader = async ({ request }) => {
 
 export default function App() {
   const { apiKey } = useLoaderData();
-  <link rel="stylesheet" href="https://unpkg.com/@shopify/polaris@10.0.0/build/esm/styles.css" />
   return (
       <ShopifyAppProvider embedded apiKey={apiKey}>
       <NavMenu>

@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 import {
   Page,
   Layout,
@@ -9,15 +10,13 @@ import {
   Box,
   InlineStack,
   BlockStack,
-  SkeletonDisplayText,
   Badge,
   Button,
   Select,
   Divider,
-  InlineGrid,
-  Tooltip,
+  InlineGrid
 } from "@shopify/polaris";
-import { ChevronUpIcon, ChevronDownIcon, ArrowLeftIcon } from "@shopify/polaris-icons";
+import { ChevronUpIcon, ChevronDownIcon } from "@shopify/polaris-icons";
 import { Icon } from "@shopify/polaris";
 import {
   LineChart,
@@ -36,76 +35,96 @@ import {
 } from "recharts";
 
 export const loader = async ({ request }) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+  const shop = session.shop;
 
-  // Fetch products and their inventory data
-  const productsResponse = await admin.graphql(
-    `#graphql
-    query getAnalyticsData {
-      products(first: 100) {
-        edges {
-          node {
-            id
-            title
-            variants(first: 20) {
-              edges {
-                node {
-                  id
-                  price
-                  inventoryQuantity
-                }
-              }
-            }
-          }
-        }
+  const totalSubscriptions = await prisma.backInStockSubscriber.count({ where: { shop } });
+  const activeSubscriptions = await prisma.backInStockSubscriber.count({ where: { shop, notified: false } });
+  const notificationsSent = await prisma.backInStockSubscriber.count({ where: { shop, notified: true } });
+
+  const allSubscribers = await prisma.backInStockSubscriber.findMany({
+    where: { shop },
+    orderBy: { createdAt: 'asc' }
+  });
+
+  // Calculate Restocked Products (unique products that had a notification sent)
+  const restockedProductsSet = new Set();
+  allSubscribers.forEach(sub => {
+    if (sub.notified) {
+      restockedProductsSet.add(sub.productId);
+    }
+  });
+  const restockedProducts = restockedProductsSet.size;
+
+  // Calculate Conversion Rate (percentage of notified vs total)
+  let conversionRate = 0;
+  if (totalSubscriptions > 0) {
+    conversionRate = ((notificationsSent / totalSubscriptions) * 100).toFixed(1);
+  }
+
+  // Generate Trend Data (Last 7 days)
+  const last7Days = Array.from({length: 7}, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    return d.toISOString().split('T')[0]; // YYYY-MM-DD
+  });
+  
+  const trendDataMap = {};
+  last7Days.forEach(day => {
+    const dateObj = new Date(day);
+    const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dateObj.getDay()];
+    trendDataMap[day] = { day: dayName, subscriptions: 0, notifications: 0 };
+  });
+
+  allSubscribers.forEach(sub => {
+    const createdDay = new Date(sub.createdAt).toISOString().split('T')[0];
+    if (trendDataMap[createdDay]) {
+      trendDataMap[createdDay].subscriptions++;
+    }
+    
+    if (sub.notified && sub.notifiedAt) {
+      const notifiedDay = new Date(sub.notifiedAt).toISOString().split('T')[0];
+      if (trendDataMap[notifiedDay]) {
+        trendDataMap[notifiedDay].notifications++;
       }
     }
-    `
-  );
+  });
+  
+  const trendData = Object.values(trendDataMap);
 
-  const productsData = await productsResponse.json();
-  const products = productsData.data?.products?.edges || [];
+  // Generate Product Performance (Top 5)
+  const productStats = {};
+  allSubscribers.forEach(sub => {
+    if (!productStats[sub.productId]) {
+      productStats[sub.productId] = { name: (sub.productTitle || "Unknown").substring(0, 20), subscriptions: 0, restocks: 0 };
+    }
+    productStats[sub.productId].subscriptions++;
+    if (sub.notified) {
+       productStats[sub.productId].restocks++;
+    }
+  });
 
-  // Generate mock analytics data
-  const analyticsData = {
-    totalSubscriptions: 324,
-    activeSubscriptions: 287,
-    restockedProducts: 45,
-    notificationsSent: 892,
-    conversionRate: 28.5,
-    avgNotificationTime: 2.4,
-    products: products.slice(0, 10),
-  };
+  const productPerformance = Object.values(productStats)
+    .sort((a, b) => b.subscriptions - a.subscriptions)
+    .slice(0, 5);
 
-  return analyticsData;
-};
-
-const generateTrendData = () => {
-  const data = [];
-  for (let i = 0; i < 7; i++) {
-    data.push({
-      day: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][i],
-      subscriptions: Math.floor(Math.random() * 150) + 50,
-      notifications: Math.floor(Math.random() * 200) + 100,
-    });
-  }
-  return data;
-};
-
-const generateProductPerformance = (products) => {
-  return products.map((product, idx) => ({
-    name: product.node.title.substring(0, 20),
-    subscriptions: Math.floor(Math.random() * 50) + 10,
-    restocks: Math.floor(Math.random() * 15) + 1,
-  }));
-};
-
-const generateConversionData = () => {
-  return [
-    { name: "Converted", value: 28.5 },
-    { name: "Pending", value: 45.3 },
-    { name: "Ignored", value: 26.2 },
+  // Generate Conversion Data for Pie Chart
+  const conversionData = [
+    { name: "Converted (Notified)", value: notificationsSent },
+    { name: "Pending", value: activeSubscriptions },
   ];
+
+  return {
+    totalSubscriptions,
+    activeSubscriptions,
+    restockedProducts,
+    notificationsSent,
+    conversionRate,
+    avgNotificationTime: 2.4, // placeholder
+    trendData,
+    productPerformance,
+    conversionData
+  };
 };
 
 const COLORS = ["#008060", "#ee00008e", "#D97706"];
@@ -150,12 +169,7 @@ export default function Analytics() {
   const data = useLoaderData();
   const [timeRange, setTimeRange] = useState("week");
 
-  const trendData = useMemo(() => generateTrendData(), []);
-  const productPerformance = useMemo(
-    () => generateProductPerformance(data.products),
-    [data.products]
-  );
-  const conversionData = useMemo(() => generateConversionData(), []);
+  const { trendData, productPerformance, conversionData } = data;
 
   const handleTimeRangeChange = (value) => {
     setTimeRange(value);
@@ -168,14 +182,6 @@ export default function Analytics() {
           Analytics Dashboard
         </Text>
       }
-      // backAction={{
-      //   content: "Dashboard",
-      //   url: "/app",
-      //   icon: ArrowLeftIcon,
-      //   style: { transform: 'scale(1.8)', marginRight: '5px' }
-      // }}
-      // compact
-      // titleAlignment="left"
     >
       <Layout>
         <Layout.Section>
@@ -186,9 +192,7 @@ export default function Analytics() {
             <Select
               labelInline
               options={[
-                { label: "Last 7 Days", value: "week" },
-                { label: "Last 30 Days", value: "month" },
-                { label: "Last 90 Days", value: "quarter" },
+                { label: "Last 7 Days", value: "week" }
               ]}
               value={timeRange}
               onChange={handleTimeRangeChange}
@@ -227,7 +231,6 @@ export default function Analytics() {
         <Layout.Section>
           <BlockStack gap="400">
             <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
-              {/* Additional Metrics */}
               <MetricCard
                 label="Conversion Rate"
                 value={`${data.conversionRate}%`}
@@ -252,7 +255,7 @@ export default function Analytics() {
             <Box padding="400">
               <BlockStack gap="400">
                 <Text as="h3" variant="headingSm">
-                  Subscription & Notification Trends
+                  Subscription & Notification Trends (Last 7 Days)
                 </Text>
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={trendData}>
@@ -297,7 +300,7 @@ export default function Analytics() {
                       <BarChart data={productPerformance}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="name" />
-                        <YAxis />
+                        <YAxis allowDecimals={false} />
                         <RechartsTooltip />
                         <Legend />
                         <Bar dataKey="subscriptions" fill="#008060" />
@@ -322,7 +325,7 @@ export default function Analytics() {
                           cx="50%"
                           cy="50%"
                           labelLine={false}
-                          label={({ name, value }) => `${name}: ${value}%`}
+                          label={({ name, value }) => `${name}: ${value}`}
                           outerRadius={80}
                           fill="#8884d8"
                           dataKey="value"
@@ -344,7 +347,6 @@ export default function Analytics() {
           </BlockStack>
         </Layout.Section>
 
-        {/* Summary Cards */}
         <Layout.Section>
           <Divider />
         </Layout.Section>
@@ -406,7 +408,6 @@ export default function Analytics() {
           </BlockStack>
         </Layout.Section>
 
-        {/* Action Buttons */}
         <Layout.Section>
           <InlineStack gap="400">
             <Button url="/app/reports" variant="secondary">

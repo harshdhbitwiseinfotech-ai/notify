@@ -11,6 +11,7 @@
 
 import { PrismaClient } from "@prisma/client";
 import { authenticate } from "../shopify.server";
+import { sendRestockEmail } from "../utils/emailService";
 
 const prisma = new PrismaClient();
 
@@ -67,14 +68,18 @@ export const action = async ({ request }) => {
     );
 
     // ── Notify each subscriber ────────────────────────────────────────────────
+    // Get product image to pass to the email
+    const productImage = product.image?.src || (product.images && product.images.length > 0 ? product.images[0].src : null);
+
     const notifyPromises = subscribers.map(async (sub) => {
       try {
-        await sendNotificationEmail({
+        await sendRestockEmail({
           to: sub.email,
           productTitle: sub.productTitle,
           variantTitle: sub.variantTitle,
           shop,
           productId: sub.productId,
+          productImage: productImage
         });
 
         // Mark as notified
@@ -102,68 +107,3 @@ export const action = async ({ request }) => {
     return new Response("Internal error", { status: 500 });
   }
 };
-
-// ── Email sender ──────────────────────────────────────────────────────────────
-/**
- * Placeholder email function.
- *
- * To use a real email provider, replace the body of this function with:
- *   • Nodemailer + SMTP:  https://nodemailer.com
- *   • SendGrid:           https://sendgrid.com/docs/for-developers/sending-email/
- *   • Resend:             https://resend.com/docs/introduction
- *
- * The function receives:
- *   @param {Object} opts
- *   @param {string} opts.to            Subscriber email
- *   @param {string} opts.productTitle  Product name
- *   @param {string} opts.variantTitle  Variant name (e.g. "Size M / Red")
- *   @param {string} opts.shop          Shop domain (e.g. mystore.myshopify.com)
- *   @param {string} opts.productId     GID of the product
- */
-async function sendNotificationEmail({
-  to,
-  productTitle,
-  variantTitle,
-  shop,
-  productId,
-}) {
-  const productHandle = productId.split("/").pop(); // last segment of GID
-  const productUrl = `https://${shop}/products/${productHandle}`;
-
-  const subject = `🎉 ${productTitle} is back in stock!`;
-  const body = `
-Hi there,
-
-Great news! The item you were waiting for is now back in stock:
-
-  ${productTitle}${variantTitle && variantTitle !== "Default Title" ? ` — ${variantTitle}` : ""}
-
-Shop now before it sells out again:
-  ${productUrl}
-
----
-You received this email because you signed up for a back-in-stock alert
-on ${shop}. This is a one-time notification.
-  `.trim();
-
-  // ── Swap the lines below with your real email provider ────────────────────
-  console.log("=== [BACK IN STOCK EMAIL] ===");
-  console.log(`To:      ${to}`);
-  console.log(`Subject: ${subject}`);
-  console.log(`Body:\n${body}`);
-  console.log("=============================");
-
-  // Example — Nodemailer (uncomment and configure):
-  // const nodemailer = await import("nodemailer");
-  // const transporter = nodemailer.createTransport({
-  //   host: process.env.SMTP_HOST,
-  //   port: Number(process.env.SMTP_PORT || 587),
-  //   auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-  // });
-  // await transporter.sendMail({
-  //   from: `"${shop}" <${process.env.SMTP_FROM}>`,
-  //   to,
-  //   subject,
-  //   text: body,
-  // });
-}

@@ -275,7 +275,7 @@ function UsageBar({ label, used, limit, color }) {
           {label}
         </Text>
         <Text as="span" variant="bodySm" tone="subdued">
-          {used.toLocaleString()} / {limit ? limit.toLocaleString() : "∞"}
+          {String(used)} / {limit ? String(limit) : "∞"}
         </Text>
       </InlineStack>
       <ProgressBar progress={limit ? pct : 0} tone={tone} size="small" />

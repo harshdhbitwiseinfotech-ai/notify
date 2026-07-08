@@ -13,42 +13,7 @@ import {
   Thumbnail,
 } from "@shopify/polaris";
 
-const Dashboard = () => {
-  const [stats, setStats] = useState({
-    totalRequests: 0,
-    pending: 0,
-    notified: 0,
-  });
-
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  
-  // Fetch dashboard data
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-
-      // Fetch directly from the Express backend
-      const urlParams = new URLSearchParams(window.location.search);
-      const shop = urlParams.get('shop') || window?.shopify?.config?.shop || '';
-      
-      const res = await fetch(`http://localhost:5000/api/dashboard/summary?shop=${shop}`);
-      const data = await res.json();
-
-      setStats(data.stats);
-      setProducts(data.products);
-
-      setLoading(false);
-    } catch (error) {
-      console.error("Dashboard fetch error:", error);
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
+const Dashboard = ({ stats, products = [], storeProducts = [] }) => {
 
   // Define headings for the Polaris IndexTable
   const resourceName = {
@@ -77,11 +42,31 @@ const Dashboard = () => {
         </Badge>
       </IndexTable.Cell>
       <IndexTable.Cell>
-        {new Date(item.createdAt).toLocaleString()}
+        {item.createdAt}
       </IndexTable.Cell>
     </IndexTable.Row>
   ));
 
+
+  const storeProductsRowMarkup = (storeProducts || []).map((item, index) => (
+    <IndexTable.Row id={item.id} key={item.id} position={index}>
+      <IndexTable.Cell>
+        <Text variant="bodyMd" fontWeight="bold" as="span">
+          {item.title}
+        </Text>
+      </IndexTable.Cell>
+      <IndexTable.Cell>
+        <Badge tone={item.status === "Available" ? "success" : "critical"}>
+          {item.status}
+        </Badge>
+      </IndexTable.Cell>
+      <IndexTable.Cell>
+        <Text as="span" tone={item.totalInventory > 0 ? "success" : "critical"}>
+          {item.totalInventory} in stock
+        </Text>
+      </IndexTable.Cell>
+    </IndexTable.Row>
+  ));
 
   // UI
   return (
@@ -139,31 +124,47 @@ const Dashboard = () => {
           <Card padding="0">
             <Box padding="400">
               <Text variant="headingMd" as="h2">
-                📊 Product Requests
+                📊 Recent Product Requests
               </Text>
             </Box>
 
-            {loading ? (
-              <Box padding="800">
-                <InlineStack align="center">
-                  <Spinner size="medium" hasFocusableParent={false} />
-                </InlineStack>
-              </Box>
-            ) : (
-              <IndexTable
-                resourceName={resourceName}
-                itemCount={products.length}
-                selectable={false}
-                headings={[
-                  { title: "Product" },
-                  { title: "Email" },
-                  { title: "Status" },
-                  { title: "Requested At" },
-                ]}
-              >
-                {rowMarkup}
-              </IndexTable>
-            )}
+            <IndexTable
+              resourceName={resourceName}
+              itemCount={products.length}
+              selectable={false}
+              headings={[
+                { title: "Product" },
+                { title: "Email" },
+                { title: "Status" },
+                { title: "Requested At" },
+              ]}
+            >
+              {rowMarkup}
+            </IndexTable>
+          </Card>
+        </Layout.Section>
+        
+        {/* STORE PRODUCTS TABLE */}
+        <Layout.Section>
+          <Card padding="0">
+            <Box padding="400">
+              <Text variant="headingMd" as="h2">
+                🛍️ Store Products (Inventory Status)
+              </Text>
+            </Box>
+
+            <IndexTable
+              resourceName={{ singular: "store product", plural: "store products" }}
+              itemCount={(storeProducts || []).length}
+              selectable={false}
+              headings={[
+                { title: "Product" },
+                { title: "Status" },
+                { title: "Inventory" },
+              ]}
+            >
+              {storeProductsRowMarkup}
+            </IndexTable>
           </Card>
         </Layout.Section>
       </Layout>

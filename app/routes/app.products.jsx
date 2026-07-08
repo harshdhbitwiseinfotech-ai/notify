@@ -204,7 +204,7 @@ export default function Products() {
                   <Text as="h3" variant="headingLg" fontWeight="bold">
                     Products management
                   </Text>
-                  <Text as="bodyMd" tone="subdued" fontWeight="regular">
+                  <Text as="p" variant="bodyMd" tone="subdued" fontWeight="regular">
                     Search products and monitor stock availability.
                   </Text>
                 </BlockStack>

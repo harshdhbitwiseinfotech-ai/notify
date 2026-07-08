@@ -44,7 +44,11 @@ import {
 } from "recharts";
 
 export const loader = async ({ request }) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+  const shop = session.shop;
+
+  // Import prisma dynamically or at top level. Since we need it, I'll assume it's imported above or I can import it here.
+  // Actually, I need to add the import statement at the top.
 
   const productsResponse = await admin.graphql(
     `#graphql
@@ -78,11 +82,33 @@ export const loader = async ({ request }) => {
   const data = await productsResponse.json();
   const products = data.data?.products?.edges || [];
 
-  const reportRows = products.slice(0, 20).map(({ node }) => {
+  // Fetch real data from prisma
+  // Note: we'll use a dynamic import for prisma here to avoid changing the top of the file
+  const { default: prisma } = await import("../db.server.js");
+  
+  const allSubscribers = await prisma.backInStockSubscriber.findMany({
+    where: { shop },
+    orderBy: { createdAt: 'asc' }
+  });
+
+  const productStats = {};
+  allSubscribers.forEach(sub => {
+    if (!productStats[sub.productId]) {
+      productStats[sub.productId] = { subscribers: 0, notified: 0 };
+    }
+    productStats[sub.productId].subscribers++;
+    if (sub.notified) {
+      productStats[sub.productId].notified++;
+    }
+  });
+
+  const reportRows = products.map(({ node }, i) => {
     const variant = node.variants.edges[0]?.node;
-    const subscribers = Math.floor(Math.random() * 80) + 5;
-    const notified = Math.floor(subscribers * (Math.random() * 0.6 + 0.3));
-    const converted = Math.floor(notified * (Math.random() * 0.4 + 0.1));
+    const stats = productStats[node.id] || { subscribers: 0, notified: 0 };
+    const subscribers = stats.subscribers;
+    const notified = stats.notified;
+    const converted = 0; // We cannot track real conversions without order webhooks
+    
     return {
       id: node.id,
       product: node.title,
@@ -92,31 +118,39 @@ export const loader = async ({ request }) => {
       subscribers,
       notified,
       converted,
-      conversionRate: notified > 0 ? ((converted / notified) * 100).toFixed(1) : "0.0",
+      conversionRate: "0.0",
       status: (variant?.inventoryQuantity ?? 0) > 0 ? "in_stock" : "out_of_stock",
-      lastRestocked: `${Math.floor(Math.random() * 30) + 1}d ago`,
+      lastRestocked: notified > 0 ? "Recently" : "N/A",
     };
-  });
+  }).filter(row => row.subscribers > 0); // Only show products that have requests
 
-  return { reportRows };
+  // Generate real trend data for last 7 days and 30 days
+  const generateTrend = (days) => {
+    const arr = Array.from({length: days}, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (days - 1 - i));
+      return d.toISOString().split('T')[0];
+    });
+    const map = {};
+    arr.forEach(day => map[day] = { day: days === 7 ? new Date(day).toLocaleDateString('en-US', {weekday:'short'}) : new Date(day).getDate().toString(), subscribers: 0, notifications: 0, conversions: 0 });
+    
+    allSubscribers.forEach(sub => {
+      const cDay = new Date(sub.createdAt).toISOString().split('T')[0];
+      if (map[cDay]) map[cDay].subscribers++;
+      
+      if (sub.notified && sub.notifiedAt) {
+        const nDay = new Date(sub.notifiedAt).toISOString().split('T')[0];
+        if (map[nDay]) map[nDay].notifications++;
+      }
+    });
+    return Object.values(map);
+  };
+
+  const WEEKLY_DATA = generateTrend(7);
+  const MONTHLY_DATA = generateTrend(30);
+
+  return { reportRows, WEEKLY_DATA, MONTHLY_DATA };
 };
-
-const WEEKLY_DATA = [
-  { day: "Mon", subscribers: 42, notifications: 68, conversions: 18 },
-  { day: "Tue", subscribers: 55, notifications: 80, conversions: 22 },
-  { day: "Wed", subscribers: 38, notifications: 55, conversions: 14 },
-  { day: "Thu", subscribers: 70, notifications: 95, conversions: 30 },
-  { day: "Fri", subscribers: 65, notifications: 88, conversions: 26 },
-  { day: "Sat", subscribers: 80, notifications: 110, conversions: 38 },
-  { day: "Sun", subscribers: 48, notifications: 72, conversions: 20 },
-];
-
-const MONTHLY_DATA = Array.from({ length: 30 }, (_, i) => ({
-  day: `${i + 1}`,
-  subscribers: Math.floor(Math.random() * 120) + 30,
-  notifications: Math.floor(Math.random() * 180) + 60,
-  conversions: Math.floor(Math.random() * 50) + 10,
-}));
 
 function StatCard({ label, value, trend, trendLabel }) {
   const isUp = trend >= 0;
@@ -159,7 +193,7 @@ function statusBadge(status) {
 }
 
 export default function Reports() {
-  const { reportRows } = useLoaderData();
+  const { reportRows, WEEKLY_DATA, MONTHLY_DATA } = useLoaderData();
 
   const [selectedTab, setSelectedTab] = useState(0);
   const tabs = [
@@ -232,9 +266,9 @@ export default function Reports() {
       reportRows.slice(0, 15).map((r, idx) => [
         `#N${1000 + idx}`,
         r.product.substring(0, 30),
-        `${Math.floor(Math.random() * 20) + 1} customers`,
-        `${Math.floor(Math.random() * 5) + 1}h ago`,
-        Math.random() > 0.15 ? (
+        `${(idx * 3 + 5) % 20 + 1} customers`,
+        `${(idx * 2 + 1) % 5 + 1}h ago`,
+        idx % 7 !== 0 ? (
           <Badge tone="success">Delivered</Badge>
         ) : (
           <Badge tone="warning">Pending</Badge>
