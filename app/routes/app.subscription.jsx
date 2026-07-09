@@ -74,7 +74,7 @@ const PLANS = [
     features: [
       { label: "Up to 50 subscribers", included: true },
       { label: "100 notifications/month", included: true },
-      { label: "5 products monitored", included: true },
+      { label: "Top 5 products monitored", included: true },
       { label: "Email notifications", included: true },
       { label: "SMS notifications", included: false },
       { label: "Analytics dashboard", included: false },
@@ -94,7 +94,7 @@ const PLANS = [
     features: [
       { label: "Up to 500 subscribers", included: true },
       { label: "1,000 notifications/month", included: true },
-      { label: "50 products monitored", included: true },
+      { label: "Top 50 products monitored", included: true },
       { label: "Email notifications", included: true },
       { label: "SMS notifications", included: false },
       { label: "Analytics dashboard", included: true },
