@@ -192,7 +192,9 @@ export default function Analytics() {
             <Select
               labelInline
               options={[
-                { label: "Last 7 Days", value: "week" }
+                { label: "Last 7 Days", value: "week" } ,
+                { label: "Last 30 Days", value: "month" } ,
+                { label: "Last 90 Days", value: "month" }
               ]}
               value={timeRange}
               onChange={handleTimeRangeChange}
