@@ -43,13 +43,30 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function startOfPeriod(daysAgo) {
+  const d = new Date();
+  d.setDate(d.getDate() - daysAgo);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function relativeTime(date) {
+  const diff = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+// ── Loader ────────────────────────────────────────────────────────────────────
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  // Import prisma dynamically or at top level. Since we need it, I'll assume it's imported above or I can import it here.
-  // Actually, I need to add the import statement at the top.
+  const { default: prisma } = await import("../db.server.js");
 
+  // ── Shopify products ──────────────────────────────────────────────────────
   const productsResponse = await admin.graphql(
     `#graphql
     query getReportsData {
@@ -78,68 +95,184 @@ export const loader = async ({ request }) => {
       }
     }`
   );
-
   const data = await productsResponse.json();
   const products = data.data?.products?.edges || [];
 
-  // Fetch real data from prisma
-  // Note: we'll use a dynamic import for prisma here to avoid changing the top of the file
-  const { default: prisma } = await import("../db.server.js");
-  
+  // ── All subscribers ───────────────────────────────────────────────────────
   const allSubscribers = await prisma.backInStockSubscriber.findMany({
     where: { shop },
-    orderBy: { createdAt: 'asc' }
+    orderBy: { createdAt: "asc" },
   });
 
+  // ── Period boundaries ─────────────────────────────────────────────────────
+  const now = new Date();
+  const thisPeriodStart = startOfPeriod(30);   // last 30 days
+  const lastPeriodStart = startOfPeriod(60);   // 30–60 days ago
+
+  const inThisPeriod = (d) => new Date(d) >= thisPeriodStart;
+  const inLastPeriod = (d) => new Date(d) >= lastPeriodStart && new Date(d) < thisPeriodStart;
+
+  // New Subscribers
+  const newSubsThis = allSubscribers.filter((s) => inThisPeriod(s.createdAt)).length;
+  const newSubsLast = allSubscribers.filter((s) => inLastPeriod(s.createdAt)).length;
+
+  // Notifications Sent
+  const notifsThis = allSubscribers.filter((s) => s.notifiedAt && inThisPeriod(s.notifiedAt)).length;
+  const notifsLast = allSubscribers.filter((s) => s.notifiedAt && inLastPeriod(s.notifiedAt)).length;
+
+  // Avg. Delivery Time (hours between createdAt → notifiedAt for notified subs)
+  const notifiedWithTimes = allSubscribers.filter(
+    (s) => s.notified && s.notifiedAt && s.createdAt
+  );
+  const avgDelivery = (list) => {
+    if (!list.length) return null;
+    const hours =
+      list.reduce(
+        (sum, s) =>
+          sum + (new Date(s.notifiedAt) - new Date(s.createdAt)) / 3_600_000,
+        0
+      ) / list.length;
+    return Math.round(hours * 10) / 10;
+  };
+
+  const avgDelivThis = avgDelivery(
+    notifiedWithTimes.filter((s) => inThisPeriod(s.notifiedAt))
+  );
+  const avgDelivLast = avgDelivery(
+    notifiedWithTimes.filter((s) => inLastPeriod(s.notifiedAt))
+  );
+
+  // ── Helper: format change with sign ──────────────────────────────────────
+  const fmtChange = (a, b) => {
+    const diff = a - b;
+    return diff >= 0 ? `+${diff}` : `${diff}`;
+  };
+  const fmtPct = (a, b) => {
+    if (!b) return a > 0 ? "+100%" : "0%";
+    const pct = ((a - b) / b) * 100;
+    return (pct >= 0 ? "+" : "") + pct.toFixed(1) + "%";
+  };
+
+  // ── Performance Summary rows ──────────────────────────────────────────────
+  const deliveryChangeHrs =
+    avgDelivThis !== null && avgDelivLast !== null
+      ? `${avgDelivThis - avgDelivLast >= 0 ? "+" : ""}${(avgDelivThis - avgDelivLast).toFixed(1)} hrs`
+      : "N/A";
+  const deliveryTrend =
+    avgDelivThis !== null && avgDelivLast !== null
+      ? avgDelivThis <= avgDelivLast
+        ? { label: "Faster", tone: "success" }
+        : { label: "Slower", tone: "critical" }
+      : { label: "N/A", tone: "subdued" };
+
+  const performanceSummary = [
+    {
+      metric: "New Subscribers",
+      thisPeriod: newSubsThis,
+      lastPeriod: newSubsLast,
+      change: fmtChange(newSubsThis, newSubsLast),
+      trend: fmtPct(newSubsThis, newSubsLast),
+      toneUp: newSubsThis >= newSubsLast,
+    },
+    {
+      metric: "Notifications Sent",
+      thisPeriod: notifsThis,
+      lastPeriod: notifsLast,
+      change: fmtChange(notifsThis, notifsLast),
+      trend: fmtPct(notifsThis, notifsLast),
+      toneUp: notifsThis >= notifsLast,
+    },
+    {
+      metric: "Avg. Delivery Time",
+      thisPeriod: avgDelivThis !== null ? `${avgDelivThis} hrs` : "N/A",
+      lastPeriod: avgDelivLast !== null ? `${avgDelivLast} hrs` : "N/A",
+      change: deliveryChangeHrs,
+      trend: deliveryTrend.label,
+      trendTone: deliveryTrend.tone,
+      customTrend: true,
+    },
+  ];
+
+  // ── Product report rows ───────────────────────────────────────────────────
   const productStats = {};
-  allSubscribers.forEach(sub => {
+  allSubscribers.forEach((sub) => {
     if (!productStats[sub.productId]) {
       productStats[sub.productId] = { subscribers: 0, notified: 0 };
     }
     productStats[sub.productId].subscribers++;
-    if (sub.notified) {
-      productStats[sub.productId].notified++;
-    }
+    if (sub.notified) productStats[sub.productId].notified++;
   });
 
-  const reportRows = products.map(({ node }, i) => {
-    const variant = node.variants.edges[0]?.node;
-    const stats = productStats[node.id] || { subscribers: 0, notified: 0 };
-    const subscribers = stats.subscribers;
-    const notified = stats.notified;
-    const converted = 0; // We cannot track real conversions without order webhooks
-    
-    return {
-      id: node.id,
-      product: node.title,
-      image: node.images.edges[0]?.node?.url || null,
-      price: variant?.price ? `$${parseFloat(variant.price).toFixed(2)}` : "N/A",
-      stock: variant?.inventoryQuantity ?? 0,
-      subscribers,
-      notified,
-      converted,
-      conversionRate: "0.0",
-      status: (variant?.inventoryQuantity ?? 0) > 0 ? "in_stock" : "out_of_stock",
-      lastRestocked: notified > 0 ? "Recently" : "N/A",
-    };
-  }).filter(row => row.subscribers > 0); // Only show products that have requests
+  const reportRows = products
+    .map(({ node }) => {
+      const variant = node.variants.edges[0]?.node;
+      const stats = productStats[node.id] || { subscribers: 0, notified: 0 };
+      return {
+        id: node.id,
+        product: node.title,
+        image: node.images.edges[0]?.node?.url || null,
+        price: variant?.price ? `$${parseFloat(variant.price).toFixed(2)}` : "N/A",
+        stock: variant?.inventoryQuantity ?? 0,
+        subscribers: stats.subscribers,
+        notified: stats.notified,
+        status: (variant?.inventoryQuantity ?? 0) > 0 ? "in_stock" : "out_of_stock",
+        lastRestocked: stats.notified > 0 ? "Recently" : "N/A",
+      };
+    })
+    .filter((row) => row.subscribers > 0);
 
-  // Generate real trend data for last 7 days and 30 days
+  // ── Recent Notification Activity (real — last 50 notified records) ────────
+  const recentNotified = await prisma.backInStockSubscriber.findMany({
+    where: { shop, notified: true },
+    orderBy: { notifiedAt: "desc" },
+    take: 50,
+  });
+
+  // Group by productId + same notifiedAt minute (batch) to show as one log entry
+  const notificationLog = [];
+  const seen = new Map(); // key = productId + minute bucket
+
+  for (const sub of recentNotified) {
+    const bucket = `${sub.productId}__${new Date(sub.notifiedAt).toISOString().substring(0, 16)}`;
+    if (seen.has(bucket)) {
+      seen.get(bucket).recipients++;
+    } else {
+      const entry = {
+        id: `#N${String(notificationLog.length + 1000)}`,
+        product: sub.productTitle || sub.productId,
+        recipients: 1,
+        sentAt: sub.notifiedAt,
+        status: "Delivered", // if we recorded notifiedAt, it was delivered
+      };
+      seen.set(bucket, entry);
+      notificationLog.push(entry);
+    }
+  }
+
+  // ── Trend chart data ──────────────────────────────────────────────────────
   const generateTrend = (days) => {
-    const arr = Array.from({length: days}, (_, i) => {
+    const arr = Array.from({ length: days }, (_, i) => {
       const d = new Date();
       d.setDate(d.getDate() - (days - 1 - i));
-      return d.toISOString().split('T')[0];
+      return d.toISOString().split("T")[0];
     });
     const map = {};
-    arr.forEach(day => map[day] = { day: days === 7 ? new Date(day).toLocaleDateString('en-US', {weekday:'short'}) : new Date(day).getDate().toString(), subscribers: 0, notifications: 0, conversions: 0 });
-    
-    allSubscribers.forEach(sub => {
-      const cDay = new Date(sub.createdAt).toISOString().split('T')[0];
+    arr.forEach(
+      (day) =>
+        (map[day] = {
+          day:
+            days === 7
+              ? new Date(day).toLocaleDateString("en-US", { weekday: "short" })
+              : new Date(day).getDate().toString(),
+          subscribers: 0,
+          notifications: 0,
+        })
+    );
+    allSubscribers.forEach((sub) => {
+      const cDay = new Date(sub.createdAt).toISOString().split("T")[0];
       if (map[cDay]) map[cDay].subscribers++;
-      
       if (sub.notified && sub.notifiedAt) {
-        const nDay = new Date(sub.notifiedAt).toISOString().split('T')[0];
+        const nDay = new Date(sub.notifiedAt).toISOString().split("T")[0];
         if (map[nDay]) map[nDay].notifications++;
       }
     });
@@ -149,9 +282,19 @@ export const loader = async ({ request }) => {
   const WEEKLY_DATA = generateTrend(7);
   const MONTHLY_DATA = generateTrend(30);
 
-  return { reportRows, WEEKLY_DATA, MONTHLY_DATA };
+  return {
+    reportRows,
+    WEEKLY_DATA,
+    MONTHLY_DATA,
+    performanceSummary,
+    notificationLog,
+    // summary stat cards
+    totalSubscribers: allSubscribers.length,
+    totalNotified: allSubscribers.filter((s) => s.notified).length,
+  };
 };
 
+// ── Stat Card ─────────────────────────────────────────────────────────────────
 function StatCard({ label, value, trend, trendLabel }) {
   const isUp = trend >= 0;
   return (
@@ -192,8 +335,17 @@ function statusBadge(status) {
   );
 }
 
+// ── Page ──────────────────────────────────────────────────────────────────────
 export default function Reports() {
-  const { reportRows, WEEKLY_DATA, MONTHLY_DATA } = useLoaderData();
+  const {
+    reportRows,
+    WEEKLY_DATA,
+    MONTHLY_DATA,
+    performanceSummary,
+    notificationLog,
+    totalSubscribers,
+    totalNotified,
+  } = useLoaderData();
 
   const [selectedTab, setSelectedTab] = useState(0);
   const tabs = [
@@ -261,21 +413,27 @@ export default function Reports() {
   const { selectedResources, allResourcesSelected, handleSelectionChange } =
     useIndexResourceState(filteredRows);
 
-  const notificationRows = useMemo(
-    () =>
-      reportRows.slice(0, 15).map((r, idx) => [
-        `#N${1000 + idx}`,
-        r.product.substring(0, 30),
-        `${(idx * 3 + 5) % 20 + 1} customers`,
-        `${(idx * 2 + 1) % 5 + 1}h ago`,
-        idx % 7 !== 0 ? (
-          <Badge tone="success">Delivered</Badge>
-        ) : (
-          <Badge tone="warning">Pending</Badge>
-        ),
-      ]),
-    [reportRows]
-  );
+  // ── Performance Summary DataTable rows ─────────────────────────────────────
+  const performanceRows = performanceSummary.map((row) => [
+    row.metric,
+    row.thisPeriod,
+    row.lastPeriod,
+    row.change,
+    row.customTrend ? (
+      <Badge tone={row.trendTone}>{row.trend}</Badge>
+    ) : (
+      <Badge tone={row.toneUp ? "success" : "critical"}>{row.trend}</Badge>
+    ),
+  ]);
+
+  // ── Notification Log DataTable rows (real data) ────────────────────────────
+  const notificationRows = notificationLog.slice(0, 50).map((entry) => [
+    entry.id,
+    entry.product.length > 35 ? entry.product.substring(0, 35) + "…" : entry.product,
+    `${entry.recipients} ${entry.recipients === 1 ? "customer" : "customers"}`,
+    relativeTime(entry.sentAt),
+    <Badge tone="success">Delivered</Badge>,
+  ]);
 
   return (
     <Page
@@ -290,46 +448,45 @@ export default function Reports() {
         </Button>
       }
       secondaryActions={[
-        { content: "Refresh", icon: RefreshIcon, onAction: () => {} },
+        { content: "Refresh", icon: RefreshIcon, onAction: () => window.location.reload() },
       ]}
     >
       <Layout>
-        {/* Summary Stats */}
+        {/* ── Summary Stats ── */}
         <Layout.Section>
           <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="400">
             <StatCard
               label="Total Subscribers"
-              value={reportRows.reduce((s, r) => s + r.subscribers, 0)}
-              trend={14.2}
-              trendLabel="vs last period"
+              value={totalSubscribers}
+              trend={0}
+              trendLabel="all time"
             />
             <StatCard
               label="Notifications Sent"
-              value={reportRows.reduce((s, r) => s + r.notified, 0)}
-              trend={9.8}
-              trendLabel="vs last period"
+              value={totalNotified}
+              trend={0}
+              trendLabel="all time"
             />
             <StatCard
-              label="Conversions"
-              value={reportRows.reduce((s, r) => s + r.converted, 0)}
-              trend={22.5}
-              trendLabel="vs last period"
+              label="Products Tracked"
+              value={reportRows.length}
+              trend={0}
+              trendLabel="with subscribers"
             />
             <StatCard
-              label="Avg. Conversion Rate"
-              value={`${(
-                reportRows.reduce(
-                  (s, r) => s + parseFloat(r.conversionRate),
-                  0
-                ) / Math.max(reportRows.length, 1)
-              ).toFixed(1)}%`}
-              trend={5.1}
-              trendLabel="vs last period"
+              label="Notification Rate"
+              value={
+                totalSubscribers > 0
+                  ? `${((totalNotified / totalSubscribers) * 100).toFixed(1)}%`
+                  : "0%"
+              }
+              trend={0}
+              trendLabel="notified / total"
             />
           </InlineGrid>
         </Layout.Section>
 
-        {/* Tabs */}
+        {/* ── Tabs ── */}
         <Layout.Section>
           <Card padding="0">
             <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab}>
@@ -364,10 +521,6 @@ export default function Reports() {
                             <stop offset="5%" stopColor="#0071E3" stopOpacity={0.3} />
                             <stop offset="95%" stopColor="#0071E3" stopOpacity={0} />
                           </linearGradient>
-                          <linearGradient id="convGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#D97706" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="#D97706" stopOpacity={0} />
-                          </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                         <XAxis dataKey="day" tick={{ fontSize: 12 }} />
@@ -376,26 +529,46 @@ export default function Reports() {
                           contentStyle={{ borderRadius: 8, border: "1px solid #e0e0e0" }}
                         />
                         <Legend />
-                        <Area type="monotone" dataKey="subscribers" stroke="#008060" fill="url(#subGrad)" strokeWidth={2} dot={false} name="Subscribers" />
-                        <Area type="monotone" dataKey="notifications" stroke="#0071E3" fill="url(#notifGrad)" strokeWidth={2} dot={false} name="Notifications" />
-                        <Area type="monotone" dataKey="conversions" stroke="#D97706" fill="url(#convGrad)" strokeWidth={2} dot={false} name="Conversions" />
+                        <Area
+                          type="monotone"
+                          dataKey="subscribers"
+                          stroke="#008060"
+                          fill="url(#subGrad)"
+                          strokeWidth={2}
+                          dot={false}
+                          name="Subscribers"
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="notifications"
+                          stroke="#0071E3"
+                          fill="url(#notifGrad)"
+                          strokeWidth={2}
+                          dot={false}
+                          name="Notifications"
+                        />
                       </AreaChart>
                     </ResponsiveContainer>
 
                     <Divider />
 
+                    {/* ── Performance Summary (real data) ── */}
                     <Text as="h3" variant="headingMd">Performance Summary</Text>
-                    <DataTable
-                      columnContentTypes={["text", "numeric", "numeric", "numeric", "text"]}
-                      headings={["Metric", "This Period", "Last Period", "Change", "Trend"]}
-                      rows={[
-                        ["New Subscribers", "324", "285", "+39", <Badge tone="success">+13.7%</Badge>],
-                        ["Notifications Sent", "892", "756", "+136", <Badge tone="success">+18.0%</Badge>],
-                        ["Conversions", "254", "208", "+46", <Badge tone="success">+22.1%</Badge>],
-                        ["Avg. Delivery Time", "2.4 hrs", "3.1 hrs", "-0.7 hrs", <Badge tone="success">Faster</Badge>],
-                        ["Bounce Rate", "3.2%", "4.8%", "-1.6%", <Badge tone="success">Better</Badge>],
-                      ]}
-                    />
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Comparing last 30 days vs the previous 30 days using real store data.
+                    </Text>
+                    {performanceRows.length > 0 ? (
+                      <DataTable
+                        columnContentTypes={["text", "numeric", "numeric", "text", "text"]}
+                        headings={["Metric", "This Period", "Last Period", "Change", "Trend"]}
+                        rows={performanceRows}
+                        hoverable
+                      />
+                    ) : (
+                      <Banner tone="info">
+                        <p>No data yet — performance metrics will appear once subscribers are recorded.</p>
+                      </Banner>
+                    )}
                   </BlockStack>
                 </Box>
               )}
@@ -428,7 +601,9 @@ export default function Reports() {
                     <IndexTable
                       resourceName={resourceName}
                       itemCount={filteredRows.length}
-                      selectedItemsCount={allResourcesSelected ? "All" : selectedResources.length}
+                      selectedItemsCount={
+                        allResourcesSelected ? "All" : selectedResources.length
+                      }
                       onSelectionChange={handleSelectionChange}
                       headings={[
                         { title: "Product" },
@@ -437,8 +612,6 @@ export default function Reports() {
                         { title: "Status" },
                         { title: "Subscribers" },
                         { title: "Notified" },
-                        { title: "Converted" },
-                        { title: "Conv. Rate" },
                         { title: "Last Restocked" },
                       ]}
                     >
@@ -464,31 +637,52 @@ export default function Reports() {
                                   }}
                                 />
                               ) : (
-                                <Box background="bg-surface-secondary" borderRadius="200" padding="200">
+                                <Box
+                                  background="bg-surface-secondary"
+                                  borderRadius="200"
+                                  padding="200"
+                                >
                                   <Icon source={ProductIcon} tone="subdued" />
                                 </Box>
                               )}
                               <Text as="span" variant="bodyMd" fontWeight="semibold">
-                                {row.product.length > 35 ? row.product.substring(0, 35) + "…" : row.product}
+                                {row.product.length > 35
+                                  ? row.product.substring(0, 35) + "…"
+                                  : row.product}
                               </Text>
                             </InlineStack>
                           </IndexTable.Cell>
-                          <IndexTable.Cell><Text as="span" variant="bodyMd">{row.price}</Text></IndexTable.Cell>
                           <IndexTable.Cell>
-                            <Text as="span" variant="bodyMd" tone={row.stock > 0 ? "success" : "critical"} fontWeight="semibold">
+                            <Text as="span" variant="bodyMd">
+                              {row.price}
+                            </Text>
+                          </IndexTable.Cell>
+                          <IndexTable.Cell>
+                            <Text
+                              as="span"
+                              variant="bodyMd"
+                              tone={row.stock > 0 ? "success" : "critical"}
+                              fontWeight="semibold"
+                            >
                               {row.stock}
                             </Text>
                           </IndexTable.Cell>
                           <IndexTable.Cell>{statusBadge(row.status)}</IndexTable.Cell>
-                          <IndexTable.Cell><Text as="span" variant="bodyMd">{row.subscribers}</Text></IndexTable.Cell>
-                          <IndexTable.Cell><Text as="span" variant="bodyMd">{row.notified}</Text></IndexTable.Cell>
-                          <IndexTable.Cell><Text as="span" variant="bodyMd" tone="success">{row.converted}</Text></IndexTable.Cell>
                           <IndexTable.Cell>
-                            <Badge tone={parseFloat(row.conversionRate) >= 20 ? "success" : parseFloat(row.conversionRate) >= 10 ? "warning" : "critical"}>
-                              {row.conversionRate}%
-                            </Badge>
+                            <Text as="span" variant="bodyMd">
+                              {row.subscribers}
+                            </Text>
                           </IndexTable.Cell>
-                          <IndexTable.Cell><Text as="span" variant="bodySm" tone="subdued">{row.lastRestocked}</Text></IndexTable.Cell>
+                          <IndexTable.Cell>
+                            <Text as="span" variant="bodyMd">
+                              {row.notified}
+                            </Text>
+                          </IndexTable.Cell>
+                          <IndexTable.Cell>
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              {row.lastRestocked}
+                            </Text>
+                          </IndexTable.Cell>
                         </IndexTable.Row>
                       ))}
                     </IndexTable>
@@ -496,20 +690,45 @@ export default function Reports() {
                 </Box>
               )}
 
-              {/* NOTIFICATION LOG */}
+              {/* NOTIFICATION LOG (real data) */}
               {selectedTab === 2 && (
                 <Box padding="400">
                   <BlockStack gap="400">
                     <InlineStack align="space-between" blockAlign="center">
-                      <Text as="h3" variant="headingMd">Recent Notification Activity</Text>
-                      <Button icon={ExportIcon} size="slim">Export Log</Button>
+                      <BlockStack gap="100">
+                        <Text as="h3" variant="headingMd">
+                          Recent Notification Activity
+                        </Text>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Last {notificationLog.length} notification batches sent to customers
+                        </Text>
+                      </BlockStack>
+                      <Button icon={ExportIcon} size="slim">
+                        Export Log
+                      </Button>
                     </InlineStack>
-                    <DataTable
-                      columnContentTypes={["text", "text", "text", "text", "text"]}
-                      headings={["Notification ID", "Product", "Recipients", "Sent", "Status"]}
-                      rows={notificationRows}
-                      hoverable
-                    />
+
+                    {notificationRows.length === 0 ? (
+                      <Banner tone="info">
+                        <p>
+                          No notifications have been sent yet. Notifications are
+                          sent automatically when a product comes back in stock.
+                        </p>
+                      </Banner>
+                    ) : (
+                      <DataTable
+                        columnContentTypes={["text", "text", "text", "text", "text"]}
+                        headings={[
+                          "Notification ID",
+                          "Product",
+                          "Recipients",
+                          "Sent",
+                          "Status",
+                        ]}
+                        rows={notificationRows}
+                        hoverable
+                      />
+                    )}
                   </BlockStack>
                 </Box>
               )}
@@ -520,9 +739,13 @@ export default function Reports() {
         {/* Footer Actions */}
         <Layout.Section>
           <InlineStack gap="300">
-            <Button icon={ExportIcon} variant="primary">Export Full Report (CSV)</Button>
+            <Button icon={ExportIcon} variant="primary">
+              Export Full Report (CSV)
+            </Button>
             <Button icon={EmailIcon}>Email Report</Button>
-            <Button url="/app" variant="plain">← Back to Dashboard</Button>
+            <Button url="/app" variant="plain">
+              ← Back to Dashboard
+            </Button>
           </InlineStack>
         </Layout.Section>
       </Layout>

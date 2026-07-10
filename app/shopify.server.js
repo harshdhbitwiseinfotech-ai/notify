@@ -3,6 +3,8 @@ import {
   ApiVersion,
   AppDistribution,
   shopifyApp,
+  BillingInterval,
+  BillingReplacementBehavior,
 } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
@@ -16,6 +18,32 @@ const shopify = shopifyApp({
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
+  billing: {
+    "Basic Monthly": {
+      replacementBehavior: BillingReplacementBehavior.ApplyImmediately,
+      lineItems: [{ amount: 9.99, currencyCode: "USD", interval: BillingInterval.Every30Days }],
+    },
+    "Basic Yearly": {
+      replacementBehavior: BillingReplacementBehavior.ApplyImmediately,
+      lineItems: [{ amount: 95.88, currencyCode: "USD", interval: BillingInterval.Annual }],
+    },
+    "Pro Monthly": {
+      replacementBehavior: BillingReplacementBehavior.ApplyImmediately,
+      lineItems: [{ amount: 19.99, currencyCode: "USD", interval: BillingInterval.Every30Days }],
+    },
+    "Pro Yearly": {
+      replacementBehavior: BillingReplacementBehavior.ApplyImmediately,
+      lineItems: [{ amount: 191.88, currencyCode: "USD", interval: BillingInterval.Annual }],
+    },
+    "Enterprise Monthly": {
+      replacementBehavior: BillingReplacementBehavior.ApplyImmediately,
+      lineItems: [{ amount: 39.99, currencyCode: "USD", interval: BillingInterval.Every30Days }],
+    },
+    "Enterprise Yearly": {
+      replacementBehavior: BillingReplacementBehavior.ApplyImmediately,
+      lineItems: [{ amount: 383.88, currencyCode: "USD", interval: BillingInterval.Annual }],
+    },
+  },
   future: {
     expiringOfflineAccessTokens: true,
   },

@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from "react";
-import { useLoaderData, useFetcher } from "react-router";
+import { useLoaderData, useFetcher, useSubmit, redirect } from "react-router";
 import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 import {
   Page,
   Layout,
@@ -30,35 +31,179 @@ import {
   RefreshIcon,
   ExternalIcon,
 } from "@shopify/polaris-icons";
+import { resolvePlanId, getLimitsForPlan, getShopUsage } from "../utils/planLimits";
 
 // ── Loader ────────────────────────────────────────────────────────────────────
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
+  const shop = session.shop;
 
-  // Mock current subscription state
+  // ── Check active billing subscription ─────────────────────────────────────
+  let billingCheck;
+  try {
+    billingCheck = await billing.check({
+      plans: [
+        "Basic Monthly",
+        "Basic Yearly",
+        "Pro Monthly",
+        "Pro Yearly",
+        "Enterprise Monthly",
+        "Enterprise Yearly",
+      ],
+      isTest: true,
+    });
+  } catch (e) {
+    console.error("[subscription/loader] billing.check error:", e);
+    billingCheck = { hasActivePayment: false, appSubscriptions: [] };
+  }
+
+  const activeSubscription = billingCheck.hasActivePayment
+    ? billingCheck.appSubscriptions[0]
+    : null;
+
+  const planId = resolvePlanId(activeSubscription?.name);
+  const limits = getLimitsForPlan(planId);
+
+  // ── Sync plan to Store model so other endpoints can enforce limits ─────────
+  try {
+    await prisma.store.upsert({
+      where: { shop },
+      update: { plan: activeSubscription?.name || "free", isActive: true },
+      create: {
+        shop,
+        plan: activeSubscription?.name || "free",
+        isActive: true,
+      },
+    });
+  } catch (e) {
+    console.error("[subscription/loader] store upsert error:", e);
+  }
+
+  // ── Real usage from database ───────────────────────────────────────────────
+  const usageThisMonth = await getShopUsage(prisma, shop);
+
+  // ── Billing details ────────────────────────────────────────────────────────
+  let nextBillingDate = "-";
+  let price = 0;
+  let billingCycleLabel = "monthly";
+
+  if (activeSubscription) {
+    if (activeSubscription.currentPeriodEnd) {
+      nextBillingDate = new Date(activeSubscription.currentPeriodEnd)
+        .toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+    }
+    billingCycleLabel = activeSubscription.name?.includes("Yearly") ? "yearly" : "monthly";
+
+    // Map plan → price
+    const priceMap = {
+      "Basic Monthly": 9.99,
+      "Basic Yearly": 7.99,
+      "Pro Monthly": 19.99,
+      "Pro Yearly": 15.99,
+      "Enterprise Monthly": 39.99,
+      "Enterprise Yearly": 31.99,
+    };
+    price = priceMap[activeSubscription.name] ?? 0;
+  }
+
+  // ── Billing history from Shopify subscriptions ─────────────────────────────
+  // We use the appSubscriptions list for history. In a real multi-invoice setup
+  // you'd query Shopify's invoices; here we derive from known data.
+  const invoices = billingCheck.appSubscriptions
+    ? billingCheck.appSubscriptions.map((sub, i) => ({
+        id: `SUB-${String(i + 1).padStart(3, "0")}`,
+        date: sub.currentPeriodEnd
+          ? new Date(sub.currentPeriodEnd).toLocaleDateString("en-US")
+          : "-",
+        amount: sub.name
+          ? `$${
+              {
+                "Basic Monthly": "9.99",
+                "Basic Yearly": "7.99",
+                "Pro Monthly": "19.99",
+                "Pro Yearly": "15.99",
+                "Enterprise Monthly": "39.99",
+                "Enterprise Yearly": "31.99",
+              }[sub.name] ?? "0.00"
+            }`
+          : "$0.00",
+        status: "paid",
+      }))
+    : [];
+
   const currentPlan = {
-    id: "basic",
-    name: "Basic",
-    status: "active",
-    billingCycle: "monthly",
-    price: 9.99,
-    nextBillingDate: "2026-08-04",
-    usageThisMonth: {
-      subscribers: 287,
-      notifications: 892,
-      products: 45,
-    },
+    id: planId,
+    name: activeSubscription ? activeSubscription.name : "Free",
+    status: activeSubscription ? "active" : "free",
+    billingCycle: billingCycleLabel,
+    price,
+    nextBillingDate,
+    usageThisMonth,
+    limits,
   };
 
-  const invoices = [
-    { id: "INV-001", date: "2026-07-01", amount: "$9.99", status: "paid" },
-    { id: "INV-002", date: "2026-06-01", amount: "$9.99", status: "paid" },
-    { id: "INV-003", date: "2026-05-01", amount: "$9.99", status: "paid" },
-    { id: "INV-004", date: "2026-04-01", amount: "$9.99", status: "paid" },
-    { id: "INV-005", date: "2026-03-01", amount: "$9.99", status: "paid" },
+  return { currentPlan, invoices };
+};
+
+// ── Action ────────────────────────────────────────────────────────────────────
+export const action = async ({ request }) => {
+  const { billing, session } = await authenticate.admin(request);
+  const formData = await request.formData();
+  const plan = formData.get("plan");
+  const actionType = formData.get("actionType");
+
+  const ALL_PLANS = [
+    "Basic Monthly",
+    "Basic Yearly",
+    "Pro Monthly",
+    "Pro Yearly",
+    "Enterprise Monthly",
+    "Enterprise Yearly",
   ];
 
-  return { currentPlan, invoices };
+  // ── Cancel / downgrade to Free ─────────────────────────────────────────────
+  if (actionType === "cancel" || plan === "Free") {
+    let billingCheck;
+    try {
+      billingCheck = await billing.check({ plans: ALL_PLANS, isTest: true });
+    } catch (e) {
+      console.error("[subscription/action] billing.check error:", e);
+      return { success: false, error: "Could not verify subscription." };
+    }
+
+    if (billingCheck.hasActivePayment) {
+      for (const sub of billingCheck.appSubscriptions) {
+        try {
+          await billing.cancel({
+            subscriptionId: sub.id,
+            isTest: true,
+            prorate: true,
+          });
+        } catch (e) {
+          console.error("[subscription/action] billing.cancel error:", e);
+        }
+      }
+    }
+    return redirect("/app/subscription");
+  }
+
+  // ── Subscribe to a paid plan ───────────────────────────────────────────────
+  if (!plan || !ALL_PLANS.includes(plan)) {
+    return { success: false, error: "Invalid plan selected." };
+  }
+
+  try {
+    // billing.request() returns a redirect response to Shopify's billing page.
+    // We must return it directly so the browser follows the redirect.
+    return await billing.request({
+      plan,
+      isTest: true,
+      returnUrl: `${process.env.SHOPIFY_APP_URL}/app/subscription`,
+    });
+  } catch (e) {
+    console.error("[subscription/action] billing.request error:", e);
+    return { success: false, error: "Failed to initiate billing. Please try again." };
+  }
 };
 
 // ── Plan definitions ──────────────────────────────────────────────────────────
@@ -76,10 +221,7 @@ const PLANS = [
       { label: "100 notifications/month", included: true },
       { label: "Top 5 products monitored", included: true },
       { label: "Email notifications", included: true },
-      { label: "SMS notifications", included: false },
       { label: "Analytics dashboard", included: false },
-      { label: "Priority support", included: false },
-      { label: "Custom email templates", included: false },
     ],
     limits: { subscribers: 50, notifications: 100, products: 5 },
   },
@@ -96,7 +238,6 @@ const PLANS = [
       { label: "1,000 notifications/month", included: true },
       { label: "Top 50 products monitored", included: true },
       { label: "Email notifications", included: true },
-      { label: "SMS notifications", included: false },
       { label: "Analytics dashboard", included: true },
       { label: "Priority support", included: false },
       { label: "Custom email templates", included: false },
@@ -106,8 +247,8 @@ const PLANS = [
   {
     id: "pro",
     name: "Pro",
-    monthlyPrice: 29.99,
-    yearlyPrice: 23.99,
+    monthlyPrice: 19.99,
+    yearlyPrice: 15.99,
     badge: "Most Popular",
     description: "For scaling stores that need powerful automation and insights.",
     color: "#0071E3",
@@ -126,8 +267,8 @@ const PLANS = [
   {
     id: "enterprise",
     name: "Enterprise",
-    monthlyPrice: 99.99,
-    yearlyPrice: 79.99,
+    monthlyPrice: 39.99,
+    yearlyPrice: 31.99,
     badge: "Best Value",
     description: "Full power for high-volume stores with dedicated support.",
     color: "#6D28D9",
@@ -265,20 +406,28 @@ function PlanCard({ plan, isCurrentPlan, billingCycle, onSelect }) {
 }
 
 // ── Usage Bar ─────────────────────────────────────────────────────────────────
-function UsageBar({ label, used, limit, color }) {
-  const pct = limit ? Math.min((used / limit) * 100, 100) : 0;
-  const tone = pct >= 90 ? "critical" : pct >= 70 ? "caution" : "highlight";
+function UsageBar({ label, used, limit }) {
+  const isUnlimited = limit === null;
+  const pct = isUnlimited ? 0 : Math.min((used / limit) * 100, 100);
+  const tone = pct >= 100 ? "critical" : pct >= 90 ? "critical" : pct >= 70 ? "caution" : "highlight";
+  const isOver = !isUnlimited && used >= limit;
+
   return (
     <BlockStack gap="150">
       <InlineStack align="space-between">
         <Text as="span" variant="bodySm">
           {label}
         </Text>
-        <Text as="span" variant="bodySm" tone="subdued">
-          {String(used)} / {limit ? String(limit) : "∞"}
-        </Text>
+        <InlineStack gap="100" blockAlign="center">
+          <Text as="span" variant="bodySm" tone={isOver ? "critical" : "subdued"}>
+            {String(used)} / {isUnlimited ? "∞" : String(limit)}
+          </Text>
+          {isOver && (
+            <Badge tone="critical">Over Limit</Badge>
+          )}
+        </InlineStack>
       </InlineStack>
-      <ProgressBar progress={limit ? pct : 0} tone={tone} size="small" />
+      <ProgressBar progress={isUnlimited ? 0 : pct} tone={tone} size="small" />
     </BlockStack>
   );
 }
@@ -286,20 +435,28 @@ function UsageBar({ label, used, limit, color }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function Subscription() {
   const { currentPlan, invoices } = useLoaderData();
+  const submit = useSubmit();
   const [billingCycle, setBillingCycle] = useState("monthly");
-  const [upgradeModal, setUpgradeModal] = useState(null);
   const [cancelModal, setCancelModal] = useState(false);
 
+  // Determine if any limit is exceeded
+  const limits = currentPlan.limits;
+  const usage = currentPlan.usageThisMonth;
+  const subscribersOver = limits.subscribers !== null && usage.subscribers >= limits.subscribers;
+  const notificationsOver = limits.notifications !== null && usage.notifications >= limits.notifications;
+  const productsOver = limits.products !== null && usage.products >= limits.products;
+  const anyLimitExceeded = subscribersOver || notificationsOver || productsOver;
+
   const handlePlanSelect = useCallback((plan) => {
-    setUpgradeModal(plan);
-  }, []);
+    if (plan.id === "free") {
+      submit({ actionType: "cancel" }, { method: "post" });
+    } else {
+      const planName = `${plan.name} ${billingCycle === "monthly" ? "Monthly" : "Yearly"}`;
+      submit({ plan: planName, actionType: "subscribe" }, { method: "post" });
+    }
+  }, [billingCycle, submit]);
 
-  const handleConfirmUpgrade = useCallback(() => {
-    // In real app: call Shopify Billing API here
-    setUpgradeModal(null);
-  }, []);
-
-  const currentPlanDef = PLANS.find((p) => p.id === currentPlan.id) || PLANS[1];
+  const currentPlanDef = PLANS.find((p) => p.id === currentPlan.id) || PLANS[0];
 
   const invoiceRows = invoices.map((inv) => [
     inv.id,
@@ -313,6 +470,17 @@ export default function Subscription() {
     </Button>,
   ]);
 
+  // Billing details display
+  const billingCycleDisplay =
+    currentPlan.billingCycle === "yearly" ? "Yearly" : "Monthly";
+
+  const priceDisplay =
+    currentPlan.id === "free"
+      ? "$0/mo"
+      : currentPlan.billingCycle === "yearly"
+      ? `$${currentPlan.price}/mo (billed yearly)`
+      : `$${currentPlan.price}/mo`;
+
   return (
     <Page
       title={
@@ -321,12 +489,53 @@ export default function Subscription() {
         </Text>
       }
       primaryAction={
-        <Button icon={RefreshIcon} onClick={() => {}}>
-          Manage Subscription
+        <Button icon={RefreshIcon} onClick={() => window.location.reload()}>
+          Refresh Status
         </Button>
       }
     >
       <Layout>
+        {/* ── Over Limit Warning Banner ── */}
+        {anyLimitExceeded && (
+          <Layout.Section>
+            <Banner
+              title="You've reached your plan limits"
+              tone="warning"
+              action={{
+                content: "Upgrade Now",
+                onAction: () =>
+                  document
+                    .getElementById("plans-section")
+                    ?.scrollIntoView({ behavior: "smooth" }),
+              }}
+            >
+              <p>
+                Your store has exceeded one or more limits on the{" "}
+                <strong>{currentPlan.name}</strong> plan. New subscriber
+                sign-ups and notifications are <strong>paused</strong> until
+                you upgrade or the next billing cycle resets your usage.
+              </p>
+              <List>
+                {subscribersOver && (
+                  <List.Item>
+                    Subscribers: {usage.subscribers} / {limits.subscribers} (limit reached)
+                  </List.Item>
+                )}
+                {notificationsOver && (
+                  <List.Item>
+                    Notifications: {usage.notifications} / {limits.notifications} (limit reached)
+                  </List.Item>
+                )}
+                {productsOver && (
+                  <List.Item>
+                    Products Monitored: {usage.products} / {limits.products} (limit reached)
+                  </List.Item>
+                )}
+              </List>
+            </Banner>
+          </Layout.Section>
+        )}
+
         {/* ── Current Plan Banner ── */}
         <Layout.Section>
           <Banner
@@ -339,14 +548,18 @@ export default function Subscription() {
                   .getElementById("plans-section")
                   ?.scrollIntoView({ behavior: "smooth" }),
             }}
-            secondaryAction={{
-              content: "Cancel plan",
-              onAction: () => setCancelModal(true),
-            }}
+            secondaryAction={
+              currentPlan.id !== "free"
+                ? {
+                    content: "Cancel plan",
+                    onAction: () => setCancelModal(true),
+                  }
+                : undefined
+            }
           >
             <p>
-              Next billing date: <strong>{currentPlan.nextBillingDate}</strong>{" "}
-              &nbsp;·&nbsp; ${currentPlan.price}/month
+              Next billing date: <strong>{currentPlan.nextBillingDate}</strong>
+              &nbsp;·&nbsp; {priceDisplay}
             </p>
           </Banner>
         </Layout.Section>
@@ -362,18 +575,18 @@ export default function Subscription() {
                   </Text>
                   <UsageBar
                     label="Subscribers"
-                    used={currentPlan.usageThisMonth.subscribers}
-                    limit={currentPlanDef.limits.subscribers}
+                    used={usage.subscribers}
+                    limit={limits.subscribers}
                   />
                   <UsageBar
                     label="Notifications Sent"
-                    used={currentPlan.usageThisMonth.notifications}
-                    limit={currentPlanDef.limits.notifications}
+                    used={usage.notifications}
+                    limit={limits.notifications}
                   />
                   <UsageBar
                     label="Products Monitored"
-                    used={currentPlan.usageThisMonth.products}
-                    limit={currentPlanDef.limits.products}
+                    used={usage.products}
+                    limit={limits.products}
                   />
                 </BlockStack>
               </Box>
@@ -392,15 +605,19 @@ export default function Subscription() {
                   </InlineStack>
                   <InlineStack align="space-between">
                     <Text as="span" variant="bodySm" tone="subdued">Status</Text>
-                    <Badge tone="success">Active</Badge>
+                    <Badge tone={currentPlan.status === "active" ? "success" : "info"}>
+                      {currentPlan.status === "active" ? "Active" : "Free"}
+                    </Badge>
                   </InlineStack>
                   <InlineStack align="space-between">
                     <Text as="span" variant="bodySm" tone="subdued">Billing Cycle</Text>
-                    <Text as="span" variant="bodySm" fontWeight="semibold">Monthly</Text>
+                    <Text as="span" variant="bodySm" fontWeight="semibold">{billingCycleDisplay}</Text>
                   </InlineStack>
                   <InlineStack align="space-between">
                     <Text as="span" variant="bodySm" tone="subdued">Amount</Text>
-                    <Text as="span" variant="bodySm" fontWeight="semibold">${currentPlan.price}/mo</Text>
+                    <Text as="span" variant="bodySm" fontWeight="semibold">
+                      {currentPlan.id === "free" ? "$0/mo" : `$${currentPlan.price}/mo`}
+                    </Text>
                   </InlineStack>
                   <InlineStack align="space-between">
                     <Text as="span" variant="bodySm" tone="subdued">Next Billing Date</Text>
@@ -493,12 +710,18 @@ export default function Subscription() {
                 <Text as="h3" variant="headingMd">
                   Billing History
                 </Text>
-                <DataTable
-                  columnContentTypes={["text", "text", "text", "text", "text"]}
-                  headings={["Invoice", "Date", "Amount", "Status", "Receipt"]}
-                  rows={invoiceRows}
-                  hoverable
-                />
+                {invoiceRows.length > 0 ? (
+                  <DataTable
+                    columnContentTypes={["text", "text", "text", "text", "text"]}
+                    headings={["Invoice", "Date", "Amount", "Status", "Receipt"]}
+                    rows={invoiceRows}
+                    hoverable
+                  />
+                ) : (
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    No billing history yet. Your invoices will appear here after your first payment.
+                  </Text>
+                )}
               </BlockStack>
             </Box>
           </Card>
@@ -526,41 +749,6 @@ export default function Subscription() {
         </Layout.Section>
       </Layout>
 
-      {/* ── Upgrade Confirmation Modal ── */}
-      {upgradeModal && (
-        <Modal
-          open={!!upgradeModal}
-          onClose={() => setUpgradeModal(null)}
-          title={`Upgrade to ${upgradeModal.name}`}
-          primaryAction={{
-            content: "Confirm Upgrade",
-            onAction: handleConfirmUpgrade,
-            variant: "primary",
-          }}
-          secondaryActions={[
-            { content: "Cancel", onAction: () => setUpgradeModal(null) },
-          ]}
-        >
-          <Modal.Section>
-            <TextContainer>
-              <p>
-                You're about to upgrade from <strong>{currentPlan.name}</strong>{" "}
-                to <strong>{upgradeModal.name}</strong>.
-              </p>
-              <p>
-                Your new billing amount will be{" "}
-                <strong>
-                  ${billingCycle === "yearly" ? upgradeModal.yearlyPrice : upgradeModal.monthlyPrice}
-                  /{billingCycle === "yearly" ? "mo (billed yearly)" : "month"}
-                </strong>
-                .
-              </p>
-              <p>The change will take effect immediately and you'll be charged a prorated amount for the remainder of this billing period.</p>
-            </TextContainer>
-          </Modal.Section>
-        </Modal>
-      )}
-
       {/* ── Cancel Plan Modal ── */}
       <Modal
         open={cancelModal}
@@ -568,7 +756,10 @@ export default function Subscription() {
         title="Cancel Your Plan"
         primaryAction={{
           content: "Yes, Cancel Plan",
-          onAction: () => setCancelModal(false),
+          onAction: () => {
+            submit({ actionType: "cancel" }, { method: "post" });
+            setCancelModal(false);
+          },
           destructive: true,
         }}
         secondaryActions={[

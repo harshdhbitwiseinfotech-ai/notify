@@ -123,7 +123,7 @@ document.addEventListener("DOMContentLoaded", function () {
       .catch((error) => {
         console.error("Error:", error);
         messageElement.style.color = "red";
-        messageElement.innerText = "Failed to connect to server.";
+        messageElement.innerText = "Error: " + error.message;
       });
     });
   }

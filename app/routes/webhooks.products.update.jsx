@@ -4,16 +4,30 @@
  *
  * Fires whenever a product is updated in Shopify.
  * If a variant transitions to available (inventory > 0), we:
- *   1. Find all un-notified subscribers for that variant
- *   2. Send them an email (console.log placeholder — swap for Nodemailer / SendGrid)
- *   3. Mark them as notified
+ *   1. Check the shop's plan notification limit — skip sending if exceeded
+ *   2. Find all un-notified subscribers for that variant
+ *   3. Send them an email via Nodemailer / SMTP
+ *   4. Mark them as notified in the database
  */
 
 import { PrismaClient } from "@prisma/client";
 import { authenticate } from "../shopify.server";
 import { sendRestockEmail } from "../utils/emailService";
+import { resolvePlanId, getLimitsForPlan, getShopUsage, isOverLimit } from "../utils/planLimits";
 
 const prisma = new PrismaClient();
+
+/**
+ * Resolve the current plan for a shop from the Store model.
+ */
+async function getShopPlanId(shop) {
+  try {
+    const store = await prisma.store.findUnique({ where: { shop } });
+    return resolvePlanId(store?.plan);
+  } catch {
+    return "free";
+  }
+}
 
 export const action = async ({ request }) => {
   // Verify the request is from Shopify
@@ -25,6 +39,21 @@ export const action = async ({ request }) => {
 
   try {
     const product = payload;
+
+    // ── Check notification limit for this shop ────────────────────────────────
+    const planId = await getShopPlanId(shop);
+    const limits = getLimitsForPlan(planId);
+    const usage = await getShopUsage(prisma, shop);
+
+    if (isOverLimit(usage.notifications, limits.notifications)) {
+      console.warn(
+        `[Webhook:products/update] Shop ${shop} has reached its notification limit ` +
+        `(${usage.notifications}/${limits.notifications}) on plan "${planId}". ` +
+        `Skipping notifications.`
+      );
+      // Return 200 so Shopify doesn't retry — we intentionally skip
+      return new Response("Notification limit reached", { status: 200 });
+    }
 
     // ── Find variants that are now back in stock ──────────────────────────────
     const restockedVariantIds = [];
@@ -67,11 +96,28 @@ export const action = async ({ request }) => {
       `[Webhook:products/update] ${subscribers.length} subscribers to notify for shop ${shop}`
     );
 
-    // ── Notify each subscriber ────────────────────────────────────────────────
-    // Get product image to pass to the email
-    const productImage = product.image?.src || (product.images && product.images.length > 0 ? product.images[0].src : null);
+    // ── Notify each subscriber (respecting remaining quota) ───────────────────
+    const productImage =
+      product.image?.src ||
+      (product.images && product.images.length > 0 ? product.images[0].src : null);
 
-    const notifyPromises = subscribers.map(async (sub) => {
+    // How many notifications can we still send?
+    const remainingQuota =
+      limits.notifications === null
+        ? Infinity
+        : limits.notifications - usage.notifications;
+
+    // Slice the list to the remaining quota
+    const eligibleSubscribers = subscribers.slice(0, remainingQuota);
+
+    if (eligibleSubscribers.length < subscribers.length) {
+      console.warn(
+        `[Webhook:products/update] Only ${eligibleSubscribers.length} of ${subscribers.length} ` +
+        `subscribers will be notified due to plan limit for shop ${shop}.`
+      );
+    }
+
+    const notifyPromises = eligibleSubscribers.map(async (sub) => {
       try {
         await sendRestockEmail({
           to: sub.email,
@@ -79,7 +125,7 @@ export const action = async ({ request }) => {
           variantTitle: sub.variantTitle,
           shop,
           productId: sub.productId,
-          productImage: productImage
+          productImage,
         });
 
         // Mark as notified

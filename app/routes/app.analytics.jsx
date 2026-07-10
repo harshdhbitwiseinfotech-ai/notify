@@ -63,9 +63,9 @@ export const loader = async ({ request }) => {
   }
 
   // Generate Trend Data (Last 7 days)
-  const last7Days = Array.from({length: 7}, (_, i) => {
+  const last7Days = Array.from({length:90}, (_, i) => {
     const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
+    d.setDate(d.getDate() - (89 - i));
     return d.toISOString().split('T')[0]; // YYYY-MM-DD
   });
   
@@ -257,7 +257,7 @@ export default function Analytics() {
             <Box padding="400">
               <BlockStack gap="400">
                 <Text as="h3" variant="headingSm">
-                  Subscription & Notification Trends (Last 7 Days)
+                  Subscription & Notification Trends (Last 90 Days)
                 </Text>
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={trendData}>
