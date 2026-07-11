@@ -8,8 +8,6 @@ import {
   Card,
   IndexTable,
   Badge,
-  Thumbnail,
-  Button,
   Modal,
   Text,
   Box,
@@ -17,166 +15,96 @@ import {
   BlockStack,
   List,
   TextField,
+  EmptyState,
 } from "@shopify/polaris";
-import { ArrowLeftIcon, SearchIcon } from "@shopify/polaris-icons";
+import { SearchIcon } from "@shopify/polaris-icons";
 import { Icon } from "@shopify/polaris";
 
 export const loader = async ({ request }) => {
-  const { admin } = await authenticate.admin(request);
-  const response = await admin.graphql(
-    `#graphql
-    query getProductsWithInventory {
-      products(first: 50) {
-        edges {
-          node {
-            id
-            title
-            images(first: 1) {
-              edges {
-                node {
-                  url
-                }
-              }
-            }
-            variants(first: 10) {
-              edges {
-                node {
-                  price
-                  inventoryQuantity
-                }
-              }
-            }
-          }
-        }
-      }
-    }`
-  );
-
-  const parsedData = await response.json();
-  const productsNodes = parsedData.data?.products?.edges || [];
-
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  // Fetch all subscribers for this shop from real database
-  const allSubscribers = await prisma.backInStockSubscriber.findMany({
+  const recentRequests = await prisma.backInStockSubscriber.findMany({
     where: { shop },
+    orderBy: { createdAt: "desc" },
+    take: 50,
   });
 
-  // Normalize data and match with subscription real data
-  const products = productsNodes.map(({ node }) => {
-    const variant = node.variants.edges[0]?.node;
-    const inventoryCount = variant?.inventoryQuantity || 0;
-    const price = variant?.price || "0.00";
-    const image = node.images.edges[0]?.node?.url || "https://burst.shopifycdn.com/photos/placeholder-product-image.jpg";
+  const formatDate = (date) => {
+    const d = new Date(date);
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const month = months[d.getUTCMonth()];
+    const day = String(d.getUTCDate()).padStart(2, "0");
+    const year = d.getUTCFullYear();
+    const hours = String(d.getUTCHours()).padStart(2, "0");
+    const minutes = String(d.getUTCMinutes()).padStart(2, "0");
+    return `${month} ${day}, ${year}, ${hours}:${minutes} UTC`;
+  };
 
-    const productSubscribers = allSubscribers.filter(sub => sub.productId === node.id);
+  const requests = recentRequests.map((sub) => ({
+    id: sub.id,
+    productId: sub.productId,
+    productTitle: sub.productTitle || "Unknown product",
+    variantTitle: sub.variantTitle || "",
+    email: sub.email,
+    status: sub.notified ? "notified" : "pending",
+    createdAt: formatDate(sub.createdAt),
+  }));
 
-    return {
-      id: node.id,
-      title: node.title,
-      image,
-      price,
-      inventoryCount,
-      inStock: inventoryCount > 0,
-      notifyCount: productSubscribers.length,
-      subscribers: productSubscribers
-    };
-  });
-
-  return { products };
+  return { requests };
 };
 
 export default function Products() {
-  const { products } = useLoaderData();
-
-  // Modal State for viewing subscribers
-  const [activeProduct, setActiveProduct] = useState(null);
+  const { requests } = useLoaderData();
+  const [activeRequest, setActiveRequest] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
 
-  // configurable sizes (pixels)
-  const [titleSize, setTitleSize] = useState(28);
-  const [subtitleSize, setSubtitleSize] = useState(14);
-  const [backIconSize, setBackIconSize] = useState(20);
-  const [buttonBgColor, setButtonBgColor] = useState("#fffbfb23");
-  const [buttonTextColor, setButtonTextColor] = useState("#b66f05dc");
-
-  const visibleProducts = useMemo(() => {
+  const visibleRequests = useMemo(() => {
     if (!searchText.trim()) {
-      return products;
+      return requests;
     }
 
     const query = searchText.toLowerCase();
-    return products.filter((product) =>
-      product.title.toLowerCase().includes(query)
+    return requests.filter(
+      (request) =>
+        request.productTitle.toLowerCase().includes(query) ||
+        request.email.toLowerCase().includes(query) ||
+        request.status.toLowerCase().includes(query)
     );
-  }, [products, searchText]);
+  }, [requests, searchText]);
 
-  const handleOpenSubscribers = (product) => {
-    setActiveProduct(product);
+  const openRequestModal = (request) => {
+    setActiveRequest(request);
     setIsModalOpen(true);
   };
 
-  const handleCloseSubscribers = () => {
-    setActiveProduct(null);
+  const closeRequestModal = () => {
+    setActiveRequest(null);
     setIsModalOpen(false);
   };
 
   const resourceName = {
-    singular: "product",
-    plural: "products",
+    singular: "request",
+    plural: "requests",
   };
 
-  const rowMarkup = (visibleProducts || []).map((product, index) => (
-    <IndexTable.Row
-      id={product.id?.toString() || index.toString()}
-      key={product.id || index}
-      position={index}
-    >
-      {/* Product Image and Title */}
+  const rowMarkup = visibleRequests.map((request, index) => (
+    <IndexTable.Row id={request.id} key={request.id} position={index}>
+      <IndexTable.Cell>{request.productTitle}</IndexTable.Cell>
+      <IndexTable.Cell>{request.email}</IndexTable.Cell>
       <IndexTable.Cell>
-        <InlineStack gap="300" blockAlign="center">
-          <Thumbnail
-            source={product.image}
-            alt={product.title}
-            size="small"
-          />
-          <Text variant="bodyMd" fontWeight="semibold" as="span">
-            {product.title}
-          </Text>
-        </InlineStack>
+        <Badge tone={request.status === "notified" ? "success" : "attention"}>
+          {request.status}
+        </Badge>
       </IndexTable.Cell>
-
-      {/* Price */}
+      <IndexTable.Cell>{request.createdAt}</IndexTable.Cell>
       <IndexTable.Cell>
-        <Text variant="bodyMd" as="span">
-          ₹{product.price}
-        </Text>
-      </IndexTable.Cell>
-
-      {/* Stock Status */}
-      <IndexTable.Cell>
-        {product.inStock ? (
-          <Badge tone="success">In Stock</Badge>
-        ) : (
-          <Badge tone="critical">Out of Stock</Badge>
-        )}
-      </IndexTable.Cell>
-
-      {/* Notify Requests Count */}
-      <IndexTable.Cell>
-        <Text variant="bodyMd" fontWeight="semibold" as="span">
-          {product.notifyCount || 0}
-        </Text>
-      </IndexTable.Cell>
-
-      {/* Actions */}
-      <IndexTable.Cell>
-        <button onClick={() => handleOpenSubscribers(product)}
+        <button
+          onClick={() => openRequestModal(request)}
           style={{
-            backgroundColor: buttonBgColor,
-            color: buttonTextColor,
+            backgroundColor: "#fffbfb23",
+            color: "#b66f05dc",
             border: "1px solid #000000",
             borderRadius: "8px",
             padding: "8px 16px",
@@ -185,16 +113,14 @@ export default function Products() {
             fontSize: "14px",
           }}
         >
-          View Subscribers
+          View Details
         </button>
       </IndexTable.Cell>
     </IndexTable.Row>
   ));
 
   return (
-    <Page
-      title={ <Text variant="headingXl" as="h1"> Products </Text>}
-    >
+    <Page title={<Text variant="headingXl" as="h1">Recent Product Requests</Text>}>
       <Layout>
         <Layout.Section>
           <Card padding="0">
@@ -202,46 +128,50 @@ export default function Products() {
               <InlineStack blockAlign="center" align="space-between" gap="400">
                 <BlockStack spacing="tight">
                   <Text as="h3" variant="headingLg" fontWeight="bold">
-                    Products management
+                    Recent product requests
                   </Text>
                   <Text as="p" variant="bodyMd" tone="subdued" fontWeight="regular">
-                    Search products and monitor stock availability.
+                    Browse the latest back-in-stock requests from your store.
                   </Text>
                 </BlockStack>
                 <Box width="320px">
                   <TextField
-                    label="Search products"
+                    label="Search requests"
                     labelHidden
                     type="search"
                     value={searchText}
                     onChange={setSearchText}
                     clearButton
                     onClearButtonClick={() => setSearchText("")}
-                    placeholder="Search product name"
+                    placeholder="Search by product or email"
                     autoComplete="off"
                     prefix={<Icon source={SearchIcon} />}
                   />
                 </Box>
               </InlineStack>
             </Box>
-            {visibleProducts.length === 0 ? (
+
+            {visibleRequests.length === 0 ? (
               <Box padding="800">
-                <BlockStack inlineAlign="center" gap="200">
-                  <Text variant="headingMd" as="p" tone="subdued">
-                    No products found
-                  </Text>
-                </BlockStack>
+                <EmptyState
+                  heading="No recent requests found"
+                  image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+                >
+                  <p>
+                    Back-in-stock sign-ups from your storefront will appear here once customers request notifications.
+                  </p>
+                </EmptyState>
               </Box>
             ) : (
               <IndexTable
                 resourceName={resourceName}
-                itemCount={visibleProducts.length}
+                itemCount={visibleRequests.length}
                 selectable={false}
                 headings={[
                   { title: "Product" },
-                  { title: "Price" },
-                  { title: "Stock Status" },
-                  { title: "Notify Requests" },
+                  { title: "Email" },
+                  { title: "Status" },
+                  { title: "Requested At" },
                   { title: "Action" },
                 ]}
               >
@@ -252,41 +182,66 @@ export default function Products() {
         </Layout.Section>
       </Layout>
 
-      {/* MODAL OVERLAY FOR SUBSCRIBERS */}
       <Modal
         open={isModalOpen}
-        onClose={handleCloseSubscribers}
-        title={activeProduct ? "Subscribers for " + activeProduct.title : "Subscribers"}
+        onClose={closeRequestModal}
+        title={activeRequest ? `Request details for ${activeRequest.productTitle}` : "Request details"}
         primaryAction={{
           content: "Close",
-          onAction: handleCloseSubscribers,
+          onAction: closeRequestModal,
         }}
       >
         <Modal.Section>
-          <BlockStack gap="400">
-            {activeProduct && activeProduct.subscribers && activeProduct.subscribers.length > 0 ? (
-              <Box padding="100">
-                <Text variant="bodyMd" as="p" tone="subdued">
-                  The following customers want to be notified when this product is back in stock:
+          {activeRequest ? (
+            <BlockStack gap="400">
+              <Box>
+                <Text variant="bodyMd" fontWeight="semibold">
+                  Product
                 </Text>
-                <Box paddingTop="400">
-                  <List type="bullet">
-                    {activeProduct.subscribers.map((subscriber, idx) => (
-                      <List.Item key={idx}>
-                        <Text variant="bodyMd" fontWeight="semibold" as="span">
-                          {subscriber.email}
-                        </Text>
-                      </List.Item>
-                    ))}
-                  </List>
-                </Box>
+                <Text as="p" tone="subdued">
+                  {activeRequest.productTitle}
+                </Text>
               </Box>
-            ) : (
-              <Text variant="bodyMd" tone="subdued" as="p">
-                No active notification subscriptions found for this product.
-              </Text>
-            )}
-          </BlockStack>
+              <Box>
+                <Text variant="bodyMd" fontWeight="semibold">
+                  Email
+                </Text>
+                <Text as="p" tone="subdued">
+                  {activeRequest.email}
+                </Text>
+              </Box>
+              {activeRequest.variantTitle ? (
+                <Box>
+                  <Text variant="bodyMd" fontWeight="semibold">
+                    Variant
+                  </Text>
+                  <Text as="p" tone="subdued">
+                    {activeRequest.variantTitle}
+                  </Text>
+                </Box>
+              ) : null}
+              <Box>
+                <Text variant="bodyMd" fontWeight="semibold">
+                  Status
+                </Text>
+                <Text as="p" tone="subdued">
+                  {activeRequest.status}
+                </Text>
+              </Box>
+              <Box>
+                <Text variant="bodyMd" fontWeight="semibold">
+                  Requested At
+                </Text>
+                <Text as="p" tone="subdued">
+                  {activeRequest.createdAt}
+                </Text>
+              </Box>
+            </BlockStack>
+          ) : (
+            <Text variant="bodyMd" tone="subdued">
+              No request selected.
+            </Text>
+          )}
         </Modal.Section>
       </Modal>
     </Page>

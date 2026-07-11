@@ -3,102 +3,131 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import Dashboard from "./pages/dashboard";
-import { resolvePlanId } from "../utils/planLimits";
+
+const formatDate = (date) => {
+  const d = new Date(date);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const month = months[d.getUTCMonth()];
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  const year = d.getUTCFullYear();
+  const hours = String(d.getUTCHours()).padStart(2, "0");
+  const minutes = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${month} ${day}, ${year} ${hours}:${minutes} UTC`;
+};
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  // ── Stats ──────────────────────────────────────────────────────────────────
   const [totalRequests, pending, notified] = await Promise.all([
     prisma.backInStockSubscriber.count({ where: { shop } }),
     prisma.backInStockSubscriber.count({ where: { shop, notified: false } }),
     prisma.backInStockSubscriber.count({ where: { shop, notified: true } }),
   ]);
 
-  // ── Recent Requests (all 50, scrollable) ───────────────────────────────────
+  const productQuery = await admin.graphql(
+    `#graphql
+      query DashboardProductCount {
+        shop {
+          name
+        }
+        products(first: 250) {
+          edges {
+            node {
+              id
+            }
+          }
+          pageInfo {
+            hasNextPage
+          }
+        }
+      }
+    `
+  );
+
+  const productJson = await productQuery.json();
+  const shopName = productJson.data?.shop?.name || shop;
+  const totalProducts = productJson.data?.products?.edges?.length ?? 0;
+  const hasMoreProducts = productJson.data?.products?.pageInfo?.hasNextPage;
+  const totalProductLabel = hasMoreProducts ? `${totalProducts}+` : totalProducts;
+
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setHours(0, 0, 0, 0);
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+
+  const historyDates = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(sevenDaysAgo);
+    date.setDate(date.getDate() + index);
+    return date;
+  });
+
+  const historyLabels = historyDates.map((date) =>
+    date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+  );
+
+  const historyRecords = await prisma.backInStockSubscriber.findMany({
+    where: {
+      shop,
+      createdAt: { gte: sevenDaysAgo },
+    },
+    select: { createdAt: true, notified: true },
+  });
+
+  const historyMap = historyRecords.reduce((acc, record) => {
+    const dayKey = record.createdAt.toISOString().split("T")[0];
+    if (!acc[dayKey]) acc[dayKey] = { total: 0, pending: 0 };
+    acc[dayKey].total += 1;
+    if (!record.notified) acc[dayKey].pending += 1;
+    return acc;
+  }, {});
+
+  const requestHistory = historyDates.map((date) => {
+    const dayKey = date.toISOString().split("T")[0];
+    return historyMap[dayKey]?.total ?? 0;
+  });
+
+  const pendingHistory = historyDates.map((date) => {
+    const dayKey = date.toISOString().split("T")[0];
+    return historyMap[dayKey]?.pending ?? 0;
+  });
+
   const recentRequests = await prisma.backInStockSubscriber.findMany({
     where: { shop },
     orderBy: { createdAt: "desc" },
-    take: 50,
+    take: 5,
   });
 
-  const formatDate = (d) => {
-    const dt = new Date(d);
-    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    const mon = months[dt.getUTCMonth()];
-    const day = String(dt.getUTCDate()).padStart(2, "0");
-    const year = dt.getUTCFullYear();
-    const hr = String(dt.getUTCHours()).padStart(2, "0");
-    const min = String(dt.getUTCMinutes()).padStart(2, "0");
-    return `${mon} ${day}, ${year}, ${hr}:${min} UTC`;
-  };
+  const topProductCounts = await prisma.backInStockSubscriber.groupBy({
+    by: ["productId"],
+    where: { shop },
+    _count: { productId: true },
+    orderBy: { _count: { productId: "desc" } },
+    take: 5,
+  });
 
-  const dashboardProducts = recentRequests.map((sub) => ({
-    productName: sub.productTitle || sub.productId,
-    email: sub.email,
-    status: sub.notified ? "notified" : "pending",
-    createdAt: formatDate(sub.createdAt),
-    image: null,
-  }));
+  const topProductIds = topProductCounts.map((item) => item.productId);
+  let topProducts = [];
 
-  // ── Current Plan from Store model ──────────────────────────────────────────
-  let currentPlanId = "none";
-  try {
-    const store = await prisma.store.findUnique({ where: { shop } });
-    if (store?.plan) {
-      currentPlanId = resolvePlanId(store.plan);
-    }
-  } catch (e) {
-    console.error("[dashboard/loader] store lookup error:", e);
-  }
-
-  // ── Store products (only fetch if plan is free or basic) ───────────────────
-  // For free: top 5, for basic: top 50. Pro/Enterprise: section hidden.
-  let products = [];
-  if (currentPlanId === "free" || currentPlanId === "basic") {
-    const fetchLimit = currentPlanId === "free" ? 5 : 50;
-
-    // Get subscriber counts per product so we can show "top selling" (most requested)
-    const subscriberCounts = await prisma.backInStockSubscriber.groupBy({
-      by: ["productId"],
-      where: { shop },
-      _count: { productId: true },
-      orderBy: { _count: { productId: "desc" } },
-      take: fetchLimit,
-    });
-
-    const topProductIds = subscriberCounts.map((s) => s.productId);
-
-    // Fetch product details from Shopify for those top products
-    // If no subscriber data, fall back to latest products
-    const graphqlLimit = Math.max(fetchLimit, 50);
-    const response = await admin.graphql(
+  if (topProductIds.length > 0) {
+    const topProductQuery = await admin.graphql(
       `#graphql
-        query DashboardProducts($first: Int!) {
-          products(first: $first) {
-            edges {
-              node {
-                id
-                title
-                handle
-                status
-                images(first: 1) {
-                  edges {
-                    node {
-                      url
-                    }
+        query TopRequestedProducts($ids: [ID!]!) {
+          nodes(ids: $ids) {
+            ... on Product {
+              id
+              title
+              handle
+              images(first: 1) {
+                edges {
+                  node {
+                    url
                   }
                 }
-                variants(first: 10) {
-                  edges {
-                    node {
-                      id
-                      title
-                      price
-                      inventoryQuantity
-                      availableForSale
-                    }
+              }
+              variants(first: 10) {
+                edges {
+                  node {
+                    inventoryQuantity
                   }
                 }
               }
@@ -106,50 +135,57 @@ export const loader = async ({ request }) => {
           }
         }
       `,
-      { variables: { first: graphqlLimit } }
+      { variables: { ids: topProductIds } }
     );
 
-    const responseJson = await response.json();
-    const allNodes = responseJson.data?.products?.edges || [];
+    const topProductsJson = await topProductQuery.json();
+    const nodes = topProductsJson.data?.nodes || [];
+    const productMap = nodes.reduce((map, product) => {
+      if (product?.id) {
+        map[product.id] = product;
+      }
+      return map;
+    }, {});
 
-    // Map Shopify products
-    const mapped = allNodes.map(({ node }) => {
-      const variants = node.variants.edges.map(({ node: v }) => ({
-        id: v.id,
-        title: v.title,
-        price: v.price,
-        inventoryQuantity: v.inventoryQuantity,
-        availableForSale: v.availableForSale,
-      }));
-      const totalInventory = variants.reduce(
-        (t, v) => t + (v.inventoryQuantity ?? 0),
-        0
-      );
-      const subscriberEntry = subscriberCounts.find((s) => s.productId === node.id);
+    topProducts = topProductCounts.map((item) => {
+      const product = productMap[item.productId];
+      const totalInventory = product
+        ? product.variants.edges.reduce(
+            (sum, variantEdge) => sum + (variantEdge.node.inventoryQuantity ?? 0),
+            0
+          )
+        : 0;
+
       return {
-        id: node.id,
-        title: node.title,
-        handle: node.handle,
-        image: node.images.edges[0]?.node?.url || null,
-        status: totalInventory === 0 ? "Sold out" : "Available",
-        totalInventory,
-        variants,
-        subscriberCount: subscriberEntry ? subscriberEntry._count.productId : 0,
+        id: item.productId,
+        title: product?.title || "Unknown product",
+        image: product?.images?.edges?.[0]?.node?.url || null,
+        inventory: totalInventory,
+        requestCount: item._count.productId,
       };
     });
-
-    // Sort: products with the most subscriber requests first (top selling/most wanted)
-    mapped.sort((a, b) => b.subscriberCount - a.subscriberCount);
-
-    // Slice to the plan limit
-    products = mapped.slice(0, fetchLimit);
   }
 
   return {
-    products,
-    stats: { totalRequests, pending, notified },
-    dashboardProducts,
-    currentPlan: currentPlanId,
+    stats: {
+      totalRequests,
+      pending,
+      notified,
+      totalProducts: totalProductLabel,
+      completionPercent: totalRequests ? Math.round((notified / totalRequests) * 100) : 0,
+      pendingPercent: totalRequests ? Math.round((pending / totalRequests) * 100) : 0,
+      requestHistory,
+      pendingHistory,
+      historyLabels,
+    },
+    shopName,
+    recentRequests: recentRequests.map((request) => ({
+      id: request.id,
+      email: request.email,
+      productTitle: request.productTitle || "Unknown product",
+      createdAt: formatDate(request.createdAt),
+    })),
+    topProducts,
   };
 };
 
@@ -158,9 +194,9 @@ export default function Index() {
   return (
     <Dashboard
       stats={data.stats}
-      products={data.dashboardProducts}
-      storeProducts={data.products}
-      currentPlan={data.currentPlan}
+      recentRequests={data.recentRequests}
+      shopName={data.shopName}
+      topProducts={data.topProducts}
     />
   );
 }

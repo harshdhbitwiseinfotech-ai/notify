@@ -33,10 +33,10 @@ document.addEventListener("DOMContentLoaded", function () {
   if (addToCartForms.length === 0) return;
 
   const mainForm = addToCartForms[0];
-  
+
   // Inject our container right after the Add to Cart form
   mainForm.insertAdjacentHTML('afterend', formHtml);
-  
+
   const bisContainer = document.getElementById("bis-dynamic-container");
   const bisVariantInput = document.getElementById("bis-variant-id");
   const bisForm = document.getElementById("back-in-stock-form");
@@ -80,7 +80,7 @@ document.addEventListener("DOMContentLoaded", function () {
         if (variant) updateUI(variant);
       }
     }
-  }).observe(document, {subtree: true, childList: true});
+  }).observe(document, { subtree: true, childList: true });
 
   // Handle form submission
   if (bisForm) {
@@ -105,26 +105,30 @@ document.addEventListener("DOMContentLoaded", function () {
           email: email,
           productId: productId,
           variantId: variantId,
-          productTitle: productName, 
-          shop: window.Shopify?.shop || window.location.hostname
+          productTitle: productName,
+          shop: (window.Shopify?.shop || window.location.hostname || window.location.host || "").toLowerCase().trim()
         }),
       })
-      .then(async (response) => {
-        const data = await response.json();
-        if (response.ok) {
-          messageElement.style.color = "green";
-          messageElement.innerText = "Success! You'll be notified when it's back.";
-          bisForm.reset();
-        } else {
+        .then(async (response) => {
+          const contentType = response.headers.get("content-type");
+          if (!contentType || !contentType.includes("application/json")) {
+            throw new Error("API returned non-JSON response. Ensure your App Proxy URL is correct.");
+          }
+          const data = await response.json();
+          if (response.ok) {
+            messageElement.style.color = "green";
+            messageElement.innerText = "Success! You'll be notified when it's back.";
+            bisForm.reset();
+          } else {
+            messageElement.style.color = "red";
+            messageElement.innerText = data.error || data.message || "Something went wrong.";
+          }
+        })
+        .catch((error) => {
+          console.error("Error:", error);
           messageElement.style.color = "red";
-          messageElement.innerText = data.message || "Something went wrong.";
-        }
-      })
-      .catch((error) => {
-        console.error("Error:", error);
-        messageElement.style.color = "red";
-        messageElement.innerText = "Error: " + error.message;
-      });
+          messageElement.innerText = "Error: " + error.message;
+        });
     });
   }
 });

@@ -62,10 +62,21 @@ export async function action({ request }) {
       body = Object.fromEntries(formData.entries());
     }
 
-    const { shop, email, productId, variantId, productTitle, variantTitle } = body;
+    console.log("[api/notify-me] Incoming Body:", body);
+    console.log("[api/notify-me] URL:", request.url);
+
+    const { shop: bodyShop, email, productId, variantId, productTitle, variantTitle } = body;
+    
+    // Shopify App Proxy injects the correct .myshopify.com domain in the query string
+    const url = new URL(request.url);
+    const shopQuery = url.searchParams.get("shop");
+    const shop = shopQuery || bodyShop;
+
+    const normalizedShop = String(shop || "").toLowerCase().trim();
+    const normalizedEmail = String(email || "").toLowerCase().trim();
 
     // ── Validation ─────────────────────────────────────────────────────────────
-    if (!shop || !email || !productId || !variantId || !productTitle) {
+    if (!normalizedShop || !normalizedEmail || !productId || !variantId || !productTitle) {
       return new Response(
         JSON.stringify({ error: "Missing required fields" }),
         {
@@ -76,7 +87,7 @@ export async function action({ request }) {
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!emailRegex.test(normalizedEmail)) {
       return new Response(JSON.stringify({ error: "Invalid email address" }), {
         status: 400,
         headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
@@ -87,8 +98,8 @@ export async function action({ request }) {
     const existingSubscriber = await prisma.backInStockSubscriber.findUnique({
       where: {
         shop_email_variantId: {
-          shop: String(shop),
-          email: String(email).toLowerCase().trim(),
+          shop: normalizedShop,
+          email: normalizedEmail,
           variantId: String(variantId),
         },
       },
@@ -115,46 +126,25 @@ export async function action({ request }) {
         );
       }
 
-      // Block if product monitoring limit reached (new product being tracked)
-      if (limits.products !== null) {
-        // Check if this product is already tracked by the shop
-        const existingProductSubscriber = await prisma.backInStockSubscriber.findFirst({
-          where: { shop: String(shop), productId: String(productId) },
-        });
-
-        if (!existingProductSubscriber && isOverLimit(usage.products, limits.products)) {
-          return new Response(
-            JSON.stringify({
-              error: "This store has reached its product monitoring limit. Please try again later.",
-              limitReached: true,
-              limitType: "products",
-            }),
-            {
-              status: 429,
-              headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
-            }
-          );
-        }
-      }
     }
 
     // ── Upsert subscriber (unique: shop + email + variantId) ───────────────────
     await prisma.backInStockSubscriber.upsert({
       where: {
         shop_email_variantId: {
-          shop: String(shop),
-          email: String(email).toLowerCase().trim(),
+          shop: normalizedShop,
+          email: normalizedEmail,
           variantId: String(variantId),
         },
       },
       update: {
-        notified: false,       // reset if they re-subscribe after being notified
+        notified: false,
         notifiedAt: null,
         updatedAt: new Date(),
       },
       create: {
-        shop: String(shop),
-        email: String(email).toLowerCase().trim(),
+        shop: normalizedShop,
+        email: normalizedEmail,
         productId: String(productId),
         variantId: String(variantId),
         productTitle: String(productTitle),

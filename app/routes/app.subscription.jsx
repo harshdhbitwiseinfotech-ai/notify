@@ -219,11 +219,10 @@ const PLANS = [
     features: [
       { label: "Up to 50 subscribers", included: true },
       { label: "100 notifications/month", included: true },
-      { label: "Top 5 products monitored", included: true },
       { label: "Email notifications", included: true },
       { label: "Analytics dashboard", included: false },
     ],
-    limits: { subscribers: 50, notifications: 100, products: 5 },
+    limits: { subscribers: 50, notifications: 100 },
   },
   {
     id: "basic",
@@ -236,13 +235,12 @@ const PLANS = [
     features: [
       { label: "Up to 500 subscribers", included: true },
       { label: "1,000 notifications/month", included: true },
-      { label: "Top 50 products monitored", included: true },
       { label: "Email notifications", included: true },
       { label: "Analytics dashboard", included: true },
       { label: "Priority support", included: false },
       { label: "Custom email templates", included: false },
     ],
-    limits: { subscribers: 500, notifications: 1000, products: 50 },
+    limits: { subscribers: 500, notifications: 1000 },
   },
   {
     id: "pro",
@@ -255,14 +253,13 @@ const PLANS = [
     features: [
       { label: "Up to 5,000 subscribers", included: true },
       { label: "10,000 notifications/month", included: true },
-      { label: "Unlimited products", included: true },
       { label: "Email notifications", included: true },
       { label: "SMS notifications", included: true },
       { label: "Analytics dashboard", included: true },
       { label: "Priority support", included: true },
       { label: "Custom email templates", included: true },
     ],
-    limits: { subscribers: 5000, notifications: 10000, products: null },
+    limits: { subscribers: 5000, notifications: 10000 },
   },
   {
     id: "enterprise",
@@ -275,14 +272,13 @@ const PLANS = [
     features: [
       { label: "Unlimited subscribers", included: true },
       { label: "Unlimited notifications", included: true },
-      { label: "Unlimited products", included: true },
       { label: "Email notifications", included: true },
       { label: "SMS notifications", included: true },
       { label: "Analytics dashboard", included: true },
       { label: "Dedicated support", included: true },
       { label: "Custom email templates", included: true },
     ],
-    limits: { subscribers: null, notifications: null, products: null },
+    limits: { subscribers: null, notifications: null },
   },
 ];
 
@@ -444,8 +440,7 @@ export default function Subscription() {
   const usage = currentPlan.usageThisMonth;
   const subscribersOver = limits.subscribers !== null && usage.subscribers >= limits.subscribers;
   const notificationsOver = limits.notifications !== null && usage.notifications >= limits.notifications;
-  const productsOver = limits.products !== null && usage.products >= limits.products;
-  const anyLimitExceeded = subscribersOver || notificationsOver || productsOver;
+  const anyLimitExceeded = subscribersOver || notificationsOver;
 
   const handlePlanSelect = useCallback((plan) => {
     if (plan.id === "free") {
@@ -526,11 +521,6 @@ export default function Subscription() {
                     Notifications: {usage.notifications} / {limits.notifications} (limit reached)
                   </List.Item>
                 )}
-                {productsOver && (
-                  <List.Item>
-                    Products Monitored: {usage.products} / {limits.products} (limit reached)
-                  </List.Item>
-                )}
               </List>
             </Banner>
           </Layout.Section>
@@ -582,11 +572,6 @@ export default function Subscription() {
                     label="Notifications Sent"
                     used={usage.notifications}
                     limit={limits.notifications}
-                  />
-                  <UsageBar
-                    label="Products Monitored"
-                    used={usage.products}
-                    limit={limits.products}
                   />
                 </BlockStack>
               </Box>
