@@ -24,7 +24,7 @@ export default function App() {
       <ShopifyAppProvider embedded apiKey={apiKey}>
       <NavMenu>
         <Link to="/app" rel="home" prefetch="none">Dashboard</Link>
-        <Link to="/app/products" prefetch="none">Products</Link>
+        <Link to="/app/products" prefetch="none">Notifications</Link>
         <Link to="/app/analytics" prefetch="none">Analytics</Link>
         <Link to="/app/reports" prefetch="none">Reports</Link>
         <Link to="/app/subscription" prefetch="none">Plans & Billing</Link>

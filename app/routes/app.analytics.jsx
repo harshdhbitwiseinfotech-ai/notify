@@ -96,7 +96,7 @@ export const loader = async ({ request }) => {
   const productStats = {};
   allSubscribers.forEach(sub => {
     if (!productStats[sub.productId]) {
-      productStats[sub.productId] = { name: (sub.productTitle || "Unknown").substring(0, 20), subscriptions: 0, restocks: 0 };
+      productStats[sub.productId] = { name: sub.productTitle || "Unknown", subscriptions: 0, restocks: 0 };
     }
     productStats[sub.productId].subscriptions++;
     if (sub.notified) {
@@ -252,101 +252,34 @@ export default function Analytics() {
         </Layout.Section>
 
         {/* Subscription & Notification Trends */}
+        {/* Product Performance */}
         <Layout.Section>
           <Card>
             <Box padding="400">
               <BlockStack gap="400">
                 <Text as="h3" variant="headingSm">
-                  Subscription & Notification Trends (Last 90 Days)
+                  Top Products by Subscriptions
                 </Text>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={trendData}>
+                <ResponsiveContainer width="100%" height={420}>
+                  <BarChart data={productPerformance} barCategoryGap="10%" barGap={8}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="day" />
-                    <YAxis />
+                    <XAxis
+                      dataKey="name"
+                      interval={0}
+                      tick={false}
+                      axisLine={false}
+                      tickLine={false}
+                      height={20}
+                    />
+                    <YAxis allowDecimals={false} />
                     <RechartsTooltip />
-                    <Legend />
-                    <Line
-                      type="monotone"
-                      dataKey="subscriptions"
-                      stroke="#008060"
-                      strokeWidth={2}
-                      dot={{ fill: "#008060" }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="notifications"
-                      stroke="#0071E3"
-                      strokeWidth={2}
-                      dot={{ fill: "#0071E3" }}
-                    />
-                  </LineChart>
+                    <Bar dataKey="subscriptions" fill="#008060" radius={[8, 8, 0, 0]} barSize={24} />
+                    <Bar dataKey="restocks" fill="#F59E0B" radius={[8, 8, 0, 0]} barSize={24} />
+                  </BarChart>
                 </ResponsiveContainer>
               </BlockStack>
             </Box>
           </Card>
-        </Layout.Section>
-
-        {/* Product Performance & Conversion Rate */}
-        <Layout.Section>
-          <BlockStack gap="400">
-            <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
-              {/* Product Performance */}
-              <Card>
-                <Box padding="400">
-                  <BlockStack gap="400">
-                    <Text as="h3" variant="headingSm">
-                      Top Products by Subscriptions
-                    </Text>
-                    <ResponsiveContainer width="100%" height={250}>
-                      <BarChart data={productPerformance}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" />
-                        <YAxis allowDecimals={false} />
-                        <RechartsTooltip />
-                        <Legend />
-                        <Bar dataKey="subscriptions" fill="#008060" />
-                        <Bar dataKey="restocks" fill="#F59E0B" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </BlockStack>
-                </Box>
-              </Card>
-
-              {/* Conversion Rate Pie Chart */}
-              <Card>
-                <Box padding="400">
-                  <BlockStack gap="400">
-                    <Text as="h3" variant="headingSm">
-                      Notification Conversion
-                    </Text>
-                    <ResponsiveContainer width="100%" height={250}>
-                      <PieChart>
-                        <Pie
-                          data={conversionData}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          label={({ name, value }) => `${name}: ${value}`}
-                          outerRadius={80}
-                          fill="#8884d8"
-                          dataKey="value"
-                        >
-                          {conversionData.map((entry, index) => (
-                            <Cell
-                              key={`cell-${index}`}
-                              fill={COLORS[index % COLORS.length]}
-                            />
-                          ))}
-                        </Pie>
-                        <RechartsTooltip />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </BlockStack>
-                </Box>
-              </Card>
-            </InlineGrid>
-          </BlockStack>
         </Layout.Section>
 
         <Layout.Section>

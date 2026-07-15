@@ -2,6 +2,8 @@ import { useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { ensureScriptTag } from "../utils/scriptTag.server";
+import { resolvePlanId, getLimitsForPlan, getShopUsage } from "../utils/planLimits";
 import Dashboard from "./pages/dashboard";
 
 const formatDate = (date) => {
@@ -18,6 +20,10 @@ const formatDate = (date) => {
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
+
+  // Auto-register the storefront ScriptTag so the widget appears
+  // on all sold-out products without any theme editor steps
+  await ensureScriptTag(session);
 
   const [totalRequests, pending, notified] = await Promise.all([
     prisma.backInStockSubscriber.count({ where: { shop } }),
@@ -151,9 +157,9 @@ export const loader = async ({ request }) => {
       const product = productMap[item.productId];
       const totalInventory = product
         ? product.variants.edges.reduce(
-            (sum, variantEdge) => sum + (variantEdge.node.inventoryQuantity ?? 0),
-            0
-          )
+          (sum, variantEdge) => sum + (variantEdge.node.inventoryQuantity ?? 0),
+          0
+        )
         : 0;
 
       return {
@@ -165,6 +171,11 @@ export const loader = async ({ request }) => {
       };
     });
   }
+
+  const store = await prisma.store.findUnique({ where: { shop } });
+  const planId = resolvePlanId(store?.plan || "free");
+  const limits = getLimitsForPlan(planId);
+  const usageThisMonth = await getShopUsage(prisma, shop);
 
   return {
     stats: {
@@ -186,6 +197,8 @@ export const loader = async ({ request }) => {
       createdAt: formatDate(request.createdAt),
     })),
     topProducts,
+    limits,
+    usage: usageThisMonth,
   };
 };
 
@@ -197,6 +210,8 @@ export default function Index() {
       recentRequests={data.recentRequests}
       shopName={data.shopName}
       topProducts={data.topProducts}
+      limits={data.limits}
+      usage={data.usage}
     />
   );
 }

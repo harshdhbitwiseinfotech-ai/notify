@@ -217,12 +217,12 @@ const PLANS = [
     description: "Perfect for stores just getting started with back-in-stock alerts.",
     color: "#637381",
     features: [
-      { label: "Up to 50 subscribers", included: true },
-      { label: "100 notifications/month", included: true },
+      { label: "Up to 35 subscribers", included: true },
+      { label: "25 notifications/month", included: true },
       { label: "Email notifications", included: true },
       { label: "Analytics dashboard", included: false },
     ],
-    limits: { subscribers: 50, notifications: 100 },
+    limits: { subscribers: 35, notifications: 25 },
   },
   {
     id: "basic",
@@ -233,7 +233,7 @@ const PLANS = [
     description: "Great for growing stores with regular restock cycles.",
     color: "#008060",
     features: [
-      { label: "Up to 500 subscribers", included: true },
+      { label: "Up to 100 subscribers", included: true },
       { label: "1,000 notifications/month", included: true },
       { label: "Email notifications", included: true },
       { label: "Analytics dashboard", included: true },
@@ -251,7 +251,7 @@ const PLANS = [
     description: "For scaling stores that need powerful automation and insights.",
     color: "#0071E3",
     features: [
-      { label: "Up to 5,000 subscribers", included: true },
+      { label: "Up to 1,000 subscribers", included: true },
       { label: "10,000 notifications/month", included: true },
       { label: "Email notifications", included: true },
       { label: "SMS notifications", included: true },
@@ -285,19 +285,33 @@ const PLANS = [
 // ── Feature Row Component ─────────────────────────────────────────────────────
 function FeatureRow({ label, included }) {
   return (
-    <InlineStack gap="200" blockAlign="center">
-      <Icon
-        source={included ? CheckCircleIcon : XCircleIcon}
-        tone={included ? "success" : "subdued"}
-      />
-      <Text
-        as="span"
-        variant="bodySm"
-        tone={included ? undefined : "subdued"}
-      >
+    <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "8px", width: "100%" }}>
+      <div style={{ 
+        display: "flex", 
+        alignItems: "center", 
+        justifyContent: "center",
+        width: 16, 
+        height: 16,
+        borderRadius: "50%",
+        background: included ? "#94a3b8" : "transparent",
+        border: included ? "none" : "1px solid #cbd5e1",
+        color: included ? "#fff" : "#cbd5e1",
+        flexShrink: 0,
+      }}>
+        {included ? (
+          <svg width="10" height="10" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+          </svg>
+        ) : (
+          <svg width="10" height="10" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+        )}
+      </div>
+      <span style={{ fontSize: "12px", color: included ? "inherit" : "#64748B", textAlign: "right", lineHeight: "1.2" }}>
         {label}
-      </Text>
-    </InlineStack>
+      </span>
+    </div>
   );
 }
 
@@ -306,97 +320,105 @@ function PlanCard({ plan, isCurrentPlan, billingCycle, onSelect }) {
   const price =
     billingCycle === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
   const isFree = price === 0;
+  
+  const isPro = plan.id === "pro";
 
   return (
     <div
       style={{
-        border: isCurrentPlan
-          ? `2px solid ${plan.color}`
-          : "1px solid #e0e0e0",
+        border: isPro
+          ? `2px solid #64748B`
+          : "none",
         borderRadius: 12,
-        overflow: "hidden",
         position: "relative",
-        background: isCurrentPlan ? `${plan.color}08` : "#fff",
-        transition: "box-shadow 0.2s",
+        background: "#fff",
+        boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
+        marginTop: 16,
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
       }}
     >
       {/* Badge */}
       {plan.badge && (
         <div
           style={{
-            background: plan.color,
+            position: "absolute",
+            top: -14,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "#475569",
             color: "#fff",
-            fontSize: 11,
-            fontWeight: 600,
-            padding: "2px 10px",
+            fontSize: 12,
+            fontWeight: 500,
+            padding: "4px 16px",
+            borderRadius: 16,
             textAlign: "center",
-            letterSpacing: 0.5,
+            whiteSpace: "nowrap",
+            zIndex: 2,
           }}
         >
           {plan.badge}
         </div>
       )}
 
-      <Box padding="400">
-        <BlockStack gap="400">
-          {/* Header */}
-          <BlockStack gap="100">
-            <InlineStack gap="200" blockAlign="center">
-              <Text as="h3" variant="headingMd" fontWeight="bold">
-                {plan.name}
-              </Text>
-              {isCurrentPlan && <Badge tone="success">Current Plan</Badge>}
-            </InlineStack>
-            <Text as="p" variant="bodySm" tone="subdued">
-              {plan.description}
-            </Text>
-          </BlockStack>
-
-          {/* Price */}
-          <InlineStack gap="100" blockAlign="baseline">
-            <Text as="span" variant="headingXl" fontWeight="bold">
-              {isFree ? "Free" : `$${price}`}
-            </Text>
-            {!isFree && (
-              <Text as="span" variant="bodySm" tone="subdued">
-                / {billingCycle === "yearly" ? "mo, billed yearly" : "month"}
-              </Text>
-            )}
-          </InlineStack>
-
-          {billingCycle === "yearly" && !isFree && (
-            <Badge tone="success">
-              Save ${((plan.monthlyPrice - plan.yearlyPrice) * 12).toFixed(2)}/yr
-            </Badge>
-          )}
-
-          <Divider />
-
-          {/* Features */}
-          <BlockStack gap="200">
-            {plan.features.map((f, i) => (
-              <FeatureRow key={i} label={f.label} included={f.included} />
-            ))}
-          </BlockStack>
-
-          <Divider />
-
-          {/* CTA */}
-          {isCurrentPlan ? (
-            <Button disabled fullWidth>
-              Current Plan
-            </Button>
-          ) : (
-            <Button
-              variant={plan.badge === "Most Popular" ? "primary" : "secondary"}
-              fullWidth
-              onClick={() => onSelect(plan)}
-            >
-              {plan.id === "free" ? "Downgrade to Free" : `Upgrade to ${plan.name}`}
-            </Button>
-          )}
+      <div style={{ padding: "32px 24px 24px", display: "flex", flexDirection: "column", flexGrow: 1 }}>
+        <BlockStack gap="200">
+          <Text as="h3" variant="headingLg" fontWeight="medium">
+            {plan.name}
+          </Text>
+          <Text as="p" variant="bodyMd" tone="subdued">
+            {plan.description}
+          </Text>
         </BlockStack>
-      </Box>
+
+        <div style={{ marginTop: "24px", marginBottom: "24px" }}>
+          <span style={{ fontSize: "36px", fontWeight: "600", color: "#000", letterSpacing: "-0.5px" }}>
+            {isFree ? "Free" : `$${price}`}
+          </span>
+          {!isFree && (
+            <span style={{ fontSize: "14px", color: "#64748B", marginLeft: "4px" }}>
+              / month
+            </span>
+          )}
+        </div>
+
+        <div style={{ marginBottom: "24px", borderBottom: "1px solid #f1f5f9" }}></div>
+
+        <BlockStack gap="300">
+          {plan.features.map((f, i) => (
+            <FeatureRow key={i} label={f.label} included={f.included} />
+          ))}
+        </BlockStack>
+
+        <div style={{ marginTop: "auto", paddingTop: "32px", position: "relative", zIndex: 10 }}>
+          <button
+            type="button"
+            onClick={() => {
+              if (!isCurrentPlan) onSelect(plan);
+            }}
+            disabled={isCurrentPlan}
+            style={{
+              width: "100%",
+              padding: "12px",
+              borderRadius: "8px",
+              fontSize: "14px",
+              fontWeight: "500",
+              cursor: isCurrentPlan ? "default" : "pointer",
+              background: isPro ? "#000" : "#fff",
+              color: isPro ? "#fff" : "#000",
+              border: isPro ? "none" : "1px solid #e2e8f0",
+              transition: "all 0.2s",
+              opacity: isCurrentPlan && !isPro ? 0.7 : 1,
+              position: "relative",
+              zIndex: 10,
+              pointerEvents: "auto",
+            }}
+          >
+            {isCurrentPlan ? "Current Plan" : plan.id === "free" ? "Downgrade to Free" : `Upgrade to ${plan.name}`}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -405,7 +427,7 @@ function PlanCard({ plan, isCurrentPlan, billingCycle, onSelect }) {
 function UsageBar({ label, used, limit }) {
   const isUnlimited = limit === null;
   const pct = isUnlimited ? 0 : Math.min((used / limit) * 100, 100);
-  const tone = pct >= 100 ? "critical" : pct >= 90 ? "critical" : pct >= 70 ? "caution" : "highlight";
+  const tone = pct >= 90 ? "critical" : "highlight";
   const isOver = !isUnlimited && used >= limit;
 
   return (
@@ -556,27 +578,7 @@ export default function Subscription() {
 
         {/* ── Usage This Month ── */}
         <Layout.Section>
-          <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
-            <Card>
-              <Box padding="400">
-                <BlockStack gap="400">
-                  <Text as="h3" variant="headingMd">
-                    Usage This Month
-                  </Text>
-                  <UsageBar
-                    label="Subscribers"
-                    used={usage.subscribers}
-                    limit={limits.subscribers}
-                  />
-                  <UsageBar
-                    label="Notifications Sent"
-                    used={usage.notifications}
-                    limit={limits.notifications}
-                  />
-                </BlockStack>
-              </Box>
-            </Card>
-
+          <InlineGrid columns={{ xs: 1 }} gap="400">
             <Card>
               <Box padding="400">
                 <BlockStack gap="300">
@@ -620,7 +622,7 @@ export default function Subscription() {
 
         {/* ── Plans Section ── */}
         <Layout.Section>
-          <div id="plans-section">
+          <div id="plans-section" style={{ marginBottom: "32px" }}>
             <BlockStack gap="500">
               <InlineStack align="space-between" blockAlign="center">
                 <BlockStack gap="100">
@@ -632,44 +634,40 @@ export default function Subscription() {
                   </Text>
                 </BlockStack>
                 {/* Billing cycle toggle */}
-                <Card padding="0">
-                  <Box padding="050">
-                    <InlineStack gap="0">
-                      <div
-                        onClick={() => setBillingCycle("monthly")}
-                        style={{
-                          padding: "6px 16px",
-                          borderRadius: 6,
-                          cursor: "pointer",
-                          background: billingCycle === "monthly" ? "#008060" : "transparent",
-                          color: billingCycle === "monthly" ? "#fff" : "#637381",
-                          fontWeight: 600,
-                          fontSize: 13,
-                          transition: "all 0.2s",
-                          userSelect: "none",
-                        }}
-                      >
-                        Monthly
-                      </div>
-                      <div
-                        onClick={() => setBillingCycle("yearly")}
-                        style={{
-                          padding: "6px 16px",
-                          borderRadius: 6,
-                          cursor: "pointer",
-                          background: billingCycle === "yearly" ? "#008060" : "transparent",
-                          color: billingCycle === "yearly" ? "#fff" : "#637381",
-                          fontWeight: 600,
-                          fontSize: 13,
-                          transition: "all 0.2s",
-                          userSelect: "none",
-                        }}
-                      >
-                        Yearly (Save 20%)
-                      </div>
-                    </InlineStack>
-                  </Box>
-                </Card>
+                <div style={{ display: "flex", gap: "4px", background: "transparent" }}>
+                  <div
+                    onClick={() => setBillingCycle("monthly")}
+                    style={{
+                      padding: "8px 20px",
+                      borderRadius: 20,
+                      cursor: "pointer",
+                      background: billingCycle === "monthly" ? "#64748B" : "transparent",
+                      color: billingCycle === "monthly" ? "#fff" : "#64748B",
+                      fontWeight: 500,
+                      fontSize: 14,
+                      transition: "all 0.2s",
+                      userSelect: "none",
+                    }}
+                  >
+                    Monthly
+                  </div>
+                  <div
+                    onClick={() => setBillingCycle("yearly")}
+                    style={{
+                      padding: "8px 20px",
+                      borderRadius: 20,
+                      cursor: "pointer",
+                      background: billingCycle === "yearly" ? "#64748B" : "transparent",
+                      color: billingCycle === "yearly" ? "#fff" : "#64748B",
+                      fontWeight: 500,
+                      fontSize: 14,
+                      transition: "all 0.2s",
+                      userSelect: "none",
+                    }}
+                  >
+                    Yearly
+                  </div>
+                </div>
               </InlineStack>
 
               <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="400">

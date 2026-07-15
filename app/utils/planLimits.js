@@ -9,8 +9,8 @@
  */
 export const PLAN_LIMITS = {
   free: {
-    subscribers: 50,
-    notifications: 100,
+    subscribers: 35,
+    notifications: 25,
   },
   basic: {
     subscribers: 500,

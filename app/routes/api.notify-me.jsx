@@ -10,7 +10,9 @@
 import { PrismaClient } from "@prisma/client";
 import { resolvePlanId, getLimitsForPlan, getShopUsage, isOverLimit } from "../utils/planLimits";
 
-const prisma = new PrismaClient();
+// Prevent multiple PrismaClient instances during hot reloads in development
+const prisma = global.prisma || new PrismaClient();
+if (process.env.NODE_ENV !== "production") global.prisma = prisma;
 
 // ── CORS helper ────────────────────────────────────────────────────────────────
 function corsHeaders(origin) {
@@ -18,6 +20,7 @@ function corsHeaders(origin) {
     "Access-Control-Allow-Origin": origin || "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Max-Age": "86400", // Cache preflight response for 24 hours
   };
 }
 
@@ -29,19 +32,67 @@ async function getShopPlanId(shop) {
   try {
     const store = await prisma.store.findUnique({ where: { shop } });
     return resolvePlanId(store?.plan);
-  } catch {
+  } catch (error) {
+    console.error("[getShopPlanId] Error:", error);
     return "free";
   }
 }
 
-// ── OPTIONS (preflight) ────────────────────────────────────────────────────────
-export async function action({ request }) {
+// Helper to handle OPTIONS preflight cleanups globally
+function handlePreflight(request) {
   const origin = request.headers.get("Origin") || "*";
-
-  // Preflight
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders(origin) });
   }
+  return null;
+}
+
+// ── GET & OPTIONS (loader) ───────────────────────────────────────────────────
+export async function loader({ request }) {
+  const preflightResponse = handlePreflight(request);
+  if (preflightResponse) return preflightResponse;
+
+  const origin = request.headers.get("Origin") || "*";
+  
+  const url = new URL(request.url);
+  const shop = url.searchParams.get("shop");
+  
+  if (shop) {
+    try {
+      const normalizedShop = String(shop).toLowerCase().trim();
+      const settings = await prisma.buttonSettings.findUnique({ where: { shop: normalizedShop } });
+      
+      const defaultSettings = {
+        buttonText:   'Notify Me',
+        primaryColor: '#2c6ecb',
+        textColor:    '#FFFFFF',
+        borderRadius: 4,
+        fontSize:     14,
+        fontFamily:   'inherit',
+        buttonSize:   'medium',
+      };
+
+      return new Response(JSON.stringify(settings || defaultSettings), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
+      });
+    } catch (e) {
+      console.error("[api/notify-me GET]", e);
+    }
+  }
+
+  return new Response(JSON.stringify({ error: "Method not allowed" }), {
+    status: 405,
+    headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
+  });
+}
+
+// ── POST & OPTIONS (action) ──────────────────────────────────────────────────
+export async function action({ request }) {
+  const preflightResponse = handlePreflight(request);
+  if (preflightResponse) return preflightResponse;
+
+  const origin = request.headers.get("Origin") || "*";
 
   if (request.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
@@ -107,15 +158,16 @@ export async function action({ request }) {
 
     if (!existingSubscriber) {
       // ── Enforce plan limits (only for new subscribers) ───────────────────────
-      const planId = await getShopPlanId(String(shop));
+      // FIX: Query the plan database using the normalized shop string!
+      const planId = await getShopPlanId(normalizedShop);
       const limits = getLimitsForPlan(planId);
-      const usage = await getShopUsage(prisma, String(shop));
+      const usage = await getShopUsage(prisma, normalizedShop);
 
       // Block if subscriber limit reached
       if (isOverLimit(usage.subscribers, limits.subscribers)) {
         return new Response(
           JSON.stringify({
-            error: "This store has reached its subscriber limit. Please try again later.",
+            error: "Limits over! Please upgrade your plan in the app to continue.",
             limitReached: true,
             limitType: "subscribers",
           }),
@@ -125,7 +177,6 @@ export async function action({ request }) {
           }
         );
       }
-
     }
 
     // ── Upsert subscriber (unique: shop + email + variantId) ───────────────────
@@ -172,13 +223,4 @@ export async function action({ request }) {
       }
     );
   }
-}
-
-// ── GET — not used, return 405 ─────────────────────────────────────────────────
-export async function loader({ request }) {
-  const origin = request.headers.get("Origin") || "*";
-  return new Response(JSON.stringify({ error: "Method not allowed" }), {
-    status: 405,
-    headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
-  });
 }

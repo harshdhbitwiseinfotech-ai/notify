@@ -518,8 +518,8 @@ export default function Reports() {
                             <stop offset="95%" stopColor="#008060" stopOpacity={0} />
                           </linearGradient>
                           <linearGradient id="notifGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#0071E3" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="#0071E3" stopOpacity={0} />
+                            <stop offset="5%" stopColor="#5700fa" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="#5700fa" stopOpacity={0} />
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -541,7 +541,7 @@ export default function Reports() {
                         <Area
                           type="monotone"
                           dataKey="notifications"
-                          stroke="#0071E3"
+                          stroke="#5700fa"
                           fill="url(#notifGrad)"
                           strokeWidth={2}
                           dot={false}

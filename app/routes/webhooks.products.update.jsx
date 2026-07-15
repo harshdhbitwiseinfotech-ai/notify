@@ -43,15 +43,6 @@ export const action = async ({ request }) => {
     const limits = getLimitsForPlan(planId);
     const usage = await getShopUsage(prisma, shop);
 
-    if (isOverLimit(usage.notifications, limits.notifications)) {
-      console.warn(
-        `[Webhook:products/update] Shop ${shop} has reached its notification limit ` +
-        `(${usage.notifications}/${limits.notifications}) on plan "${planId}". ` +
-        `Skipping notifications.`
-      );
-      return new Response("Notification limit reached", { status: 200 });
-    }
-
     function normalizeGid(id, type) {
       if (!id) return null;
       const value = String(id);
@@ -204,76 +195,54 @@ export const action = async ({ request }) => {
       return new Response("No subscribers to notify", { status: 200 });
     }
 
-    const activeReservedSubscribers = await prisma.backInStockSubscriber.findMany({
-      where: {
-        shop,
-        variantId: { in: restockedVariantIds },
-        notified: true,
-        notifiedAt: { gte: threeDaysAgo },
-      },
-    });
-
-    const activeReservationCounts = activeReservedSubscribers.reduce((acc, sub) => {
-      acc[sub.variantId] = (acc[sub.variantId] || 0) + 1;
-      return acc;
-    }, {});
-
     const remainingQuota =
       limits.notifications === null
         ? Infinity
         : Math.max(0, limits.notifications - usage.notifications);
 
-    const pendingByVariant = subscribers.reduce((acc, sub) => {
-      acc[sub.variantId] = acc[sub.variantId] || [];
-      acc[sub.variantId].push(sub);
-      return acc;
-    }, {});
+    const finalSubscribers = subscribers.slice(0, remainingQuota);
 
-    const eligibleSubscribers = [];
-    for (const variantId of restockedVariantIds) {
-      const inventoryQty = variantInventory[variantId] ?? 0;
-      const reservedCount = activeReservationCounts[variantId] ?? 0;
-      const availableSlots = Math.max(inventoryQty - reservedCount, 0);
-      if (availableSlots <= 0) continue;
-      const pending = pendingByVariant[variantId] || [];
-      eligibleSubscribers.push(...pending.slice(0, availableSlots));
-    }
-
-    if (eligibleSubscribers.length === 0) {
-      return new Response("No available notification slots", { status: 200 });
-    }
-
-    const finalSubscribers = eligibleSubscribers.slice(0, remainingQuota);
-    if (finalSubscribers.length < eligibleSubscribers.length) {
+    if (finalSubscribers.length === 0) {
       console.warn(
-        `[Webhook:products/update] Only ${finalSubscribers.length} of ${eligibleSubscribers.length} ` +
+        `[Webhook:products/update] No subscribers can be emailed due to plan notification limit for shop ${shop} (${usage.notifications}/${limits.notifications}).`
+      );
+      return new Response("No subscribers can be emailed", { status: 200 });
+    }
+
+    if (finalSubscribers.length < subscribers.length) {
+      console.warn(
+        `[Webhook:products/update] Only ${finalSubscribers.length} of ${subscribers.length} ` +
         `pending subscribers can be emailed due to plan notification limit for shop ${shop}.`
       );
     }
 
     console.log(
-      `[Webhook:products/update] notifying ${finalSubscribers.length} subscribers for shop ${shop}`
+      `[Webhook:products/update] restockedVariants=${restockedVariantIds.join(", ")} pendingSubscribers=${subscribers.length} notifying=${finalSubscribers.length} for shop ${shop}`
     );
 
+    // ── AUTOMATED LIVE BROADCASTING LOOP ────────────────────────────────────
     const notifyPromises = finalSubscribers.map(async (sub) => {
       try {
+        // Triggers the real email engine inside mailer.js using dynamic schema variables
         await sendRestockEmail({
           to: sub.email,
+          customerName: sub.name || "Subscriber", // Dynamically maps user's stored name parameter
           productTitle: sub.productTitle,
           variantTitle: sub.variantTitle,
-          shop,
+          shop, // Automates clean base domains (e.g., tested-store-atiknswl.myshopify.com)
           productId: sub.productId,
-          productImage,
+          productImage: productImage, // Populates your custom layout box with the correct product snapshot
         });
 
+        // Permanently sets notification flags to prevent repeat triggers and respect billing tiers
         await prisma.backInStockSubscriber.update({
           where: { id: sub.id },
           data: { notified: true, notifiedAt: new Date() },
         });
 
-        console.log(`[Webhook] Notified ${sub.email} for variant ${sub.variantId}`);
+        console.log(`[Webhook] Automatically notified ${sub.email} for variant ${sub.variantId}`);
       } catch (err) {
-        console.error(`[Webhook] Failed to notify ${sub.email}:`, err);
+        console.error(`[Webhook] Live processing failed to deliver to ${sub.email}:`, err);
       }
     });
 

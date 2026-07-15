@@ -87,13 +87,35 @@
   function startWidget(product, currentVariant, shop) {
     if (document.getElementById(CONTAINER_ID)) return; // already injected
 
-    injectForm(product, currentVariant);
-    updateUI(product, currentVariant);
-    listenForVariantChanges(product, shop);
+    fetch(BACKEND_URL + "?shop=" + encodeURIComponent(shop))
+      .then(function(res) { return res.json(); })
+      .then(function(settings) {
+        injectForm(product, currentVariant, settings);
+        updateUI(product, currentVariant);
+        listenForVariantChanges(product, shop);
+      })
+      .catch(function(err) {
+        console.warn("[BIS] Error fetching button settings:", err);
+        injectForm(product, currentVariant, null);
+        updateUI(product, currentVariant);
+        listenForVariantChanges(product, shop);
+      });
   }
 
   // ── Build & inject the "Notify Me" form HTML ───────────────────────────────
-  function injectForm(product, currentVariant) {
+  function injectForm(product, currentVariant, settings) {
+    var btnText = (settings && settings.buttonText) ? settings.buttonText : "Notify Me When Available";
+    var btnBg = (settings && settings.primaryColor) ? settings.primaryColor : "#0061FF";
+    var btnTextCol = (settings && settings.textColor) ? settings.textColor : "#fff";
+    var btnRadius = (settings && settings.borderRadius !== undefined) ? settings.borderRadius + "px" : "6px";
+    var btnSize = (settings && settings.fontSize) ? settings.fontSize + "px" : "15px";
+    var btnFont = (settings && settings.fontFamily) ? settings.fontFamily : "inherit";
+    
+    // Determine padding based on settings buttonSize
+    var btnPadding = "14px";
+    if (settings && settings.buttonSize === "small") btnPadding = "8px 14px";
+    if (settings && settings.buttonSize === "large") btnPadding = "16px 24px";
+
     var formHtml = [
       '<div id="' + CONTAINER_ID + '" style="display:none; margin:16px 0;">',
       '  <div id="bis-form-wrap" style="display:block;">',
@@ -106,12 +128,12 @@
       '             margin-bottom:10px; font-family:inherit;',
       '             outline:none; background:#fff; color:#1a1a1a;">',
       '    <button id="bis-submit-btn" type="button"',
-      '      style="display:block; width:100%; padding:14px;',
-      '             background:#0061FF; color:#fff; border:none;',
-      '             border-radius:6px; font-size:15px; font-weight:700;',
-      '             letter-spacing:0.02em; cursor:pointer; font-family:inherit;',
+      '      style="display:block; width:100%; padding:' + btnPadding + ';',
+      '             background:' + btnBg + '; color:' + btnTextCol + '; border:none;',
+      '             border-radius:' + btnRadius + '; font-size:' + btnSize + '; font-weight:700;',
+      '             letter-spacing:0.02em; cursor:pointer; font-family:' + btnFont + ';',
       '             transition:background 0.2s, transform 0.15s;">',
-      '      Notify Me When Available',
+      '      ' + btnText,
       '    </button>',
       '  </div>',
       '  <p id="bis-status-msg" style="display:none; margin-top:10px;',

@@ -1,8 +1,14 @@
+{% comment %}
+  Back In Stock — Global App Embed Block
+  target: body — renders on every page, but only activates on product pages.
+{% endcomment %}
+
 {% if request.page_type == 'product' %}
   <script>
     window.BIS = window.BIS || {};
-    window.BIS.product = {{ product | json }};
-    window.BIS.currentVariant = {{ product.selected_or_first_available_variant | json }};
+    window.BIS.product = {% if product %}{{ product | json }}{% else %}null{% endif %};
+    window.BIS.currentVariant = {% if product.selected_or_first_available_variant %}{{ product.selected_or_first_available_variant | json }}{% else %}null{% endif %};
+    window.BIS.shop = {{ shop.permanent_domain | json }};
   </script>
   <script src="{{ 'back-in-stock.js' | asset_url }}" defer></script>
 {% endif %}

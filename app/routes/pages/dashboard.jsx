@@ -1,4 +1,5 @@
-﻿import React from "react";
+import React from "react";
+import { useNavigate } from "react-router";
 import {
   Icon,
   Page,
@@ -19,10 +20,10 @@ import {
 
 const StatIcon = ({ type, color }) => {
   const icons = {
-    activity: <svg viewBox="0 0 20 20" width="16" height="16" fill={color}><path d="M10 0a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm-1-8h2v5H9v-5zm0-4h2v2H9V6z"/></svg>,
-    product: <svg viewBox="0 0 20 20" width="16" height="16" fill={color}><path d="M2 5l8-4 8 4v10l-8 4-8-4V5zm8-2.2L3.8 6 10 9.2 16.2 6 10 2.8zM3 7.1v8.8l7 3.5v-8.8L3 7.1zm8 12.3l7-3.5V7.1l-7 3.6v8.7z"/></svg>,
-    check: <svg viewBox="0 0 20 20" width="16" height="16" fill={color}><path d="M10 0a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm4.7-10.7l-5.5 5.5a1 1 0 01-1.4 0l-2.5-2.5a1 1 0 011.4-1.4l1.8 1.8 4.8-4.8a1 1 0 011.4 1.4z"/></svg>,
-    warning: <svg viewBox="0 0 20 20" width="16" height="16" fill={color}><path d="M10 0a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm-1-8h2v4H9v-4zm0-4h2v2H9V6z"/></svg>,
+    activity: <svg viewBox="0 0 20 20" width="16" height="16" fill={color}><path d="M10 0a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm-1-8h2v5H9v-5zm0-4h2v2H9V6z" /></svg>,
+    product: <svg viewBox="0 0 20 20" width="16" height="16" fill={color}><path d="M2 5l8-4 8 4v10l-8 4-8-4V5zm8-2.2L3.8 6 10 9.2 16.2 6 10 2.8zM3 7.1v8.8l7 3.5v-8.8L3 7.1zm8 12.3l7-3.5V7.1l-7 3.6v8.7z" /></svg>,
+    check: <svg viewBox="0 0 20 20" width="16" height="16" fill={color}><path d="M10 0a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm4.7-10.7l-5.5 5.5a1 1 0 01-1.4 0l-2.5-2.5a1 1 0 011.4-1.4l1.8 1.8 4.8-4.8a1 1 0 011.4 1.4z" /></svg>,
+    warning: <svg viewBox="0 0 20 20" width="16" height="16" fill={color}><path d="M10 0a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm-1-8h2v4H9v-4zm0-4h2v2H9V6z" /></svg>,
   };
   const getBackgroundTone = (color) => {
     if (color === '#008060') return 'bg-surface-success';
@@ -47,7 +48,7 @@ const StatCard = ({ title, value, subtitle, badgeText, badgeStatus, iconType, ic
           {title}
         </Text>
       </InlineStack>
-      
+
       <InlineStack align="center" blockAlign="center" gap="200">
         <Text as="h2" variant="heading3xl">
           {value}
@@ -88,8 +89,35 @@ const StatCard = ({ title, value, subtitle, badgeText, badgeStatus, iconType, ic
   </Card>
 );
 
+// ── Usage Bar ─────────────────────────────────────────────────────────────────
+function UsageBar({ label, used, limit }) {
+  const isUnlimited = limit === null;
+  const pct = isUnlimited ? 0 : Math.min((used / limit) * 100, 100);
+  const tone = pct >= 90 ? "critical" : "highlight";
+  const isOver = !isUnlimited && used >= limit;
 
-const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Your store" }) => {
+  return (
+    <BlockStack gap="150">
+      <InlineStack align="space-between">
+        <Text as="span" variant="bodySm">
+          {label}
+        </Text>
+        <InlineStack gap="100" blockAlign="center">
+          <Text as="span" variant="bodySm" tone={isOver ? "critical" : "subdued"}>
+            {String(used)} / {isUnlimited ? "∞" : String(limit)}
+          </Text>
+          {isOver && (
+            <Badge tone="critical">Over Limit</Badge>
+          )}
+        </InlineStack>
+      </InlineStack>
+      <ProgressBar progress={isUnlimited ? 0 : pct} tone={tone} size="small" />
+    </BlockStack>
+  );
+}
+
+const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Your store", limits, usage }) => {
+  const navigate = useNavigate();
   const totalRequests = stats?.totalRequests ?? 0;
   const pending = stats?.pending ?? 0;
   const notified = stats?.notified ?? 0;
@@ -130,11 +158,11 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
 
   const generateSparkBars = (data = []) => {
     if (!data || data.length === 0) return [];
-    const max = Math.max(...data) * 1.1 || 1; 
+    const max = Math.max(...data) * 1.1 || 1;
     const min = Math.min(...data, 0);
     const range = max - min || 1;
-    const barWidth = 100 / data.length - 2; 
-    
+    const barWidth = 100 / data.length - 2;
+
     return data.map((val, i) => {
       const x = i * (100 / data.length) + 1;
       const height = ((val - min) / range) * 30;
@@ -150,8 +178,8 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
         {/* Stat Cards */}
         <Layout.Section>
           <InlineGrid columns={{ xs: 1, sm: 2, md: hasUnlimitedPlan ? 3 : 4 }} gap="400">
-            <StatCard 
-              title="Total Requests" 
+            <StatCard
+              title="Total Requests"
               value={totalRequests}
               iconType="activity"
               iconColor="#008060"
@@ -160,8 +188,8 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
               sparkBars={generateSparkBars(requestHistory)}
               sparkColor="#008060"
             />
-            <StatCard 
-              title="Pending Notifications" 
+            <StatCard
+              title="Pending Notifications"
               value={pending}
               iconType="product"
               iconColor="#2c6ecb"
@@ -171,8 +199,8 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
               sparkColor="#2c6ecb"
             />
             {!hasUnlimitedPlan && (
-              <StatCard 
-                title="Notified Customers" 
+              <StatCard
+                title="Notified Customers"
                 value={notified}
                 subtitle={`/ ${totalRequests}`}
                 iconType="check"
@@ -208,8 +236,8 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
                   <svg viewBox="0 0 500 150" width="100%" height="200px" preserveAspectRatio="none">
                     <defs>
                       <linearGradient id="trendGradient" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="0%" stopColor="#008060" stopOpacity="0.2"/>
-                        <stop offset="100%" stopColor="#008060" stopOpacity="0"/>
+                        <stop offset="0%" stopColor="#fa3200" stopOpacity="0.2" />
+                        <stop offset="100%" stopColor="#008060" stopOpacity="0" />
                       </linearGradient>
                     </defs>
                     <polygon points={requestTrendArea} fill="url(#trendGradient)" />
@@ -268,7 +296,7 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
                       <path
                         d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                         fill="none"
-                        stroke="#2c6ecb"
+                        stroke="#fa8e00"
                         strokeWidth="4"
                         strokeDasharray={`${calculatedPendingPercent}, 100`}
                         strokeDashoffset={`-${calculatedCompletionPercent}`}
@@ -281,16 +309,16 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
                   </Box>
                   <BlockStack gap="200">
                     <InlineStack gap="200" blockAlign="center">
-                       <Box background="bg-surface-success" borderRadius="100" style={{ width: '8px', height: '8px' }} />
-                       <Text as="span" variant="bodyMd">Notified</Text>
-                       <Text as="span" variant="bodyMd" fontWeight="bold">{notified}</Text>
-                       <Text as="span" variant="bodySm" tone="subdued">({calculatedCompletionPercent}%)</Text>
+                      <Box background="bg-surface-success" borderRadius="100" style={{ width: '8px', height: '8px' }} />
+                      <Text as="span" variant="bodyMd">Notified</Text>
+                      <Text as="span" variant="bodyMd" fontWeight="bold">{notified}</Text>
+                      <Text as="span" variant="bodySm" tone="subdued">({calculatedCompletionPercent}%)</Text>
                     </InlineStack>
                     <InlineStack gap="200" blockAlign="center">
-                       <Box background="bg-surface-info" borderRadius="100" style={{ width: '8px', height: '8px' }} />
-                       <Text as="span" variant="bodyMd">Pending</Text>
-                       <Text as="span" variant="bodyMd" fontWeight="bold">{pending}</Text>
-                       <Text as="span" variant="bodySm" tone="subdued">({calculatedPendingPercent}%)</Text>
+                      <Box background="bg-surface-info" borderRadius="100" style={{ width: '8px', height: '8px' }} />
+                      <Text as="span" variant="bodyMd">Pending</Text>
+                      <Text as="span" variant="bodyMd" fontWeight="bold">{pending}</Text>
+                      <Text as="span" variant="bodySm" tone="subdued">({calculatedPendingPercent}%)</Text>
                     </InlineStack>
                   </BlockStack>
                 </InlineStack>
@@ -340,6 +368,30 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
                   </Text>
                   <ProgressBar progress={calculatedPendingPercent} size="small" tone="highlight" />
                 </BlockStack>
+
+                <Box paddingBlockStart="400">
+                  <Divider />
+                </Box>
+                
+                <BlockStack gap="400">
+                  <Text as="h3" variant="headingMd">
+                    Usage This Month
+                  </Text>
+                  {limits && usage && (
+                    <BlockStack gap="300">
+                      <UsageBar
+                        label="Subscribers"
+                        used={usage.subscribers}
+                        limit={limits.subscribers}
+                      />
+                      <UsageBar
+                        label="Notifications Sent"
+                        used={usage.notifications}
+                        limit={limits.notifications}
+                      />
+                    </BlockStack>
+                  )}
+                </BlockStack>
               </BlockStack>
             </Card>
 
@@ -378,6 +430,98 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
           </InlineGrid>
         </Layout.Section>
 
+
+        {/* ─── Quick Actions ─── */}
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="400">
+              <Text as="h2" variant="headingMd">Quick Actions</Text>
+              <Divider />
+              <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
+
+                {/* Customize Button Design */}
+                <button
+                  type="button"
+                  onClick={() => navigate("/app/button-settings")}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 12,
+                    padding: "32px 20px",
+                    background: "linear-gradient(135deg, #2c6ecb 0%, #1a4fa0 100%)",
+                    border: "none",
+                    borderRadius: 12,
+                    color: "#fff",
+                    cursor: "pointer",
+                    transition: "transform 0.15s ease, box-shadow 0.15s ease",
+                    boxShadow: "0 4px 14px rgba(44,110,203,0.35)",
+                    fontSize: 15,
+                    fontWeight: 600,
+                    letterSpacing: "0.01em",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-2px)";
+                    e.currentTarget.style.boxShadow = "0 8px 24px rgba(44,110,203,0.45)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "0 4px 14px rgba(44,110,203,0.35)";
+                  }}
+                >
+                  {/* Paintbrush icon */}
+                  <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L4.52 13.15a2 2 0 000 2.83l3.5 3.5a2 2 0 002.83 0L19.39 11a5.5 5.5 0 001.45-5.39z"/>
+                    <path d="M4 20 L8 16"/>
+                    <circle cx="4.5" cy="20.5" r="1.5"/>
+                  </svg>
+                  Customize Button Design
+                </button>
+
+                {/* Edit Email Template */}
+                <button
+                  type="button"
+                  onClick={() => navigate("/app/email-template")}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 12,
+                    padding: "32px 20px",
+                    background: "linear-gradient(135deg, #2c6ecb 0%, #1a4fa0 100%)",
+                    border: "none",
+                    borderRadius: 12,
+                    color: "#fff",
+                    cursor: "pointer",
+                    transition: "transform 0.15s ease, box-shadow 0.15s ease",
+                    boxShadow: "0 4px 14px rgba(44,110,203,0.35)",
+                    fontSize: 15,
+                    fontWeight: 600,
+                    letterSpacing: "0.01em",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-2px)";
+                    e.currentTarget.style.boxShadow = "0 8px 24px rgba(44,110,203,0.45)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "0 4px 14px rgba(44,110,203,0.35)";
+                  }}
+                >
+                  {/* Envelope icon */}
+                  <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <path d="M2 7l10 7 10-7"/>
+                  </svg>
+                  Edit Email Template
+                </button>
+
+              </InlineGrid>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
 
       </Layout>
     </Page>
