@@ -87,35 +87,46 @@
   function startWidget(product, currentVariant, shop) {
     if (document.getElementById(CONTAINER_ID)) return; // already injected
 
+    injectForm(product, currentVariant);
+    
+    // Fetch button settings from our app and apply them
     fetch(BACKEND_URL + "?shop=" + encodeURIComponent(shop))
       .then(function(res) { return res.json(); })
       .then(function(settings) {
-        injectForm(product, currentVariant, settings);
-        updateUI(product, currentVariant);
-        listenForVariantChanges(product, shop);
+        if (settings && !settings.error) {
+          applyButtonSettings(settings);
+        }
       })
       .catch(function(err) {
-        console.warn("[BIS] Error fetching button settings:", err);
-        injectForm(product, currentVariant, null);
-        updateUI(product, currentVariant);
-        listenForVariantChanges(product, shop);
+        console.warn("[BIS] Could not load button settings:", err);
       });
+
+    updateUI(product, currentVariant);
+    listenForVariantChanges(product, shop);
+  }
+
+  function applyButtonSettings(settings) {
+    var btn = document.getElementById("bis-submit-btn");
+    if (!btn) return;
+
+    var p = settings.buttonSize === "small" ? "6px 14px" : settings.buttonSize === "large" ? "14px 36px" : "10px 24px";
+    var fz = settings.fontSize ? settings.fontSize + "px" : (settings.buttonSize === "small" ? "12px" : settings.buttonSize === "large" ? "18px" : "14px");
+
+    btn.style.background = settings.primaryColor || "#0061FF";
+    btn.style.color = settings.textColor || "#ffffff";
+    btn.style.borderRadius = (settings.borderRadius !== undefined ? settings.borderRadius : 6) + "px";
+    btn.style.fontFamily = settings.fontFamily || "inherit";
+    btn.style.fontSize = fz;
+    btn.style.padding = p;
+    btn.textContent = settings.buttonText || "Notify Me When Available";
+    
+    // update hover effect colors based on primaryColor if possible, or just remove inline hover if we want,
+    // but the script already sets hover via event listeners, so let's update those as well.
+    btn.dataset.defaultBg = settings.primaryColor || "#0061FF";
   }
 
   // ── Build & inject the "Notify Me" form HTML ───────────────────────────────
-  function injectForm(product, currentVariant, settings) {
-    var btnText = (settings && settings.buttonText) ? settings.buttonText : "Notify Me When Available";
-    var btnBg = (settings && settings.primaryColor) ? settings.primaryColor : "#0061FF";
-    var btnTextCol = (settings && settings.textColor) ? settings.textColor : "#fff";
-    var btnRadius = (settings && settings.borderRadius !== undefined) ? settings.borderRadius + "px" : "6px";
-    var btnSize = (settings && settings.fontSize) ? settings.fontSize + "px" : "15px";
-    var btnFont = (settings && settings.fontFamily) ? settings.fontFamily : "inherit";
-    
-    // Determine padding based on settings buttonSize
-    var btnPadding = "14px";
-    if (settings && settings.buttonSize === "small") btnPadding = "8px 14px";
-    if (settings && settings.buttonSize === "large") btnPadding = "16px 24px";
-
+  function injectForm(product, currentVariant) {
     var formHtml = [
       '<div id="' + CONTAINER_ID + '" style="display:none; margin:16px 0;">',
       '  <div id="bis-form-wrap" style="display:block;">',
@@ -128,12 +139,12 @@
       '             margin-bottom:10px; font-family:inherit;',
       '             outline:none; background:#fff; color:#1a1a1a;">',
       '    <button id="bis-submit-btn" type="button"',
-      '      style="display:block; width:100%; padding:' + btnPadding + ';',
-      '             background:' + btnBg + '; color:' + btnTextCol + '; border:none;',
-      '             border-radius:' + btnRadius + '; font-size:' + btnSize + '; font-weight:700;',
-      '             letter-spacing:0.02em; cursor:pointer; font-family:' + btnFont + ';',
+      '      style="display:block; width:100%; padding:14px;',
+      '             background:#0061FF; color:#fff; border:none;',
+      '             border-radius:6px; font-size:15px; font-weight:700;',
+      '             letter-spacing:0.02em; cursor:pointer; font-family:inherit;',
       '             transition:background 0.2s, transform 0.15s;">',
-      '      ' + btnText,
+      '      Notify Me When Available',
       '    </button>',
       '  </div>',
       '  <p id="bis-status-msg" style="display:none; margin-top:10px;',
@@ -193,10 +204,15 @@
     if (submitBtn) {
       submitBtn.addEventListener("click", function () { handleSubmit(product); });
       submitBtn.addEventListener("mouseover", function () {
-        if (!this.disabled) this.style.background = "#0047CC";
+        if (!this.disabled) {
+          var bg = this.dataset.defaultBg || "#0061FF";
+          this.style.opacity = "0.8";
+        }
       });
       submitBtn.addEventListener("mouseout", function () {
-        if (!this.disabled) this.style.background = "#0061FF";
+        if (!this.disabled) {
+          this.style.opacity = "1";
+        }
       });
     }
   }
@@ -224,7 +240,15 @@
     var msg = document.getElementById("bis-status-msg");
     if (msg) { msg.style.display = "none"; msg.textContent = ""; }
     var btn = document.getElementById("bis-submit-btn");
-    if (btn) { btn.textContent = "Notify Me When Available"; btn.disabled = false; }
+    if (btn) { 
+       // Don't override textContent if settings were applied, but we don't have settings here easily.
+       // It's safer to just enable it. The text is already what we want.
+       if(btn.textContent === "Submitting…") {
+           // We might need to restore it to the original text. Let's just restore if we know it.
+           // Or just leave it as is, and on submit failure it's restored.
+       }
+       btn.disabled = false; 
+    }
 
     // Hide / show native Add-to-Cart + Buy Now buttons
     toggleNativeButtons(isSoldOut);
@@ -342,7 +366,11 @@
     ).toLowerCase().trim();
 
     // Loading state
-    if (submitBtn) { submitBtn.textContent = "Submitting…"; submitBtn.disabled = true; }
+    if (submitBtn) { 
+      submitBtn.dataset.originalText = submitBtn.textContent;
+      submitBtn.textContent = "Submitting…"; 
+      submitBtn.disabled = true; 
+    }
     if (msg) msg.style.display = "none";
 
     fetch(BACKEND_URL, {
@@ -378,7 +406,11 @@
             msg.style.display = "block";
             msg.textContent = result.data.error || result.data.message || "Something went wrong.";
           }
-          if (submitBtn) { submitBtn.textContent = "Notify Me When Available"; submitBtn.disabled = false; }
+          if (submitBtn) { 
+            var oldText = submitBtn.dataset.originalText || "Notify Me When Available";
+            submitBtn.textContent = oldText; 
+            submitBtn.disabled = false; 
+          }
         }
       })
       .catch(function (err) {
@@ -388,7 +420,11 @@
           msg.style.display = "block";
           msg.textContent = "Network error. Please try again.";
         }
-        if (submitBtn) { submitBtn.textContent = "Notify Me When Available"; submitBtn.disabled = false; }
+        if (submitBtn) { 
+          var oldText = submitBtn.dataset.originalText || "Notify Me When Available";
+          submitBtn.textContent = oldText; 
+          submitBtn.disabled = false; 
+        }
       });
   }
 

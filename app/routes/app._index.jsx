@@ -3,7 +3,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { ensureScriptTag } from "../utils/scriptTag.server";
-import { resolvePlanId, getLimitsForPlan, getShopUsage } from "../utils/planLimits";
+import { resolvePlanId, getLimitsForPlan, getShopUsage, getFeaturesForPlan } from "../utils/planLimits";
 import Dashboard from "./pages/dashboard";
 
 const formatDate = (date) => {
@@ -44,6 +44,7 @@ export const loader = async ({ request }) => {
             }
           }
           pageInfo {
+          
             hasNextPage
           }
         }
@@ -175,6 +176,7 @@ export const loader = async ({ request }) => {
   const store = await prisma.store.findUnique({ where: { shop } });
   const planId = resolvePlanId(store?.plan || "free");
   const limits = getLimitsForPlan(planId);
+  const features = getFeaturesForPlan(planId);
   const usageThisMonth = await getShopUsage(prisma, shop);
 
   return {
@@ -199,6 +201,8 @@ export const loader = async ({ request }) => {
     topProducts,
     limits,
     usage: usageThisMonth,
+    planId,
+    features,
   };
 };
 
@@ -212,6 +216,8 @@ export default function Index() {
       topProducts={data.topProducts}
       limits={data.limits}
       usage={data.usage}
+      planId={data.planId}
+      features={data.features}
     />
   );
 }

@@ -17,6 +17,47 @@ import {
   Thumbnail,
   Divider,
 } from "@shopify/polaris";
+import { LockIcon } from "@shopify/polaris-icons";
+
+const FeatureLock = ({ isLocked, title, upgradePlanText, children }) => {
+  if (!isLocked) return <>{children}</>;
+  
+  return (
+    <div style={{ position: 'relative' }}>
+      <div style={{ filter: 'blur(3px)', opacity: 0.5, pointerEvents: 'none' }}>
+        {children}
+      </div>
+      <div style={{
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        zIndex: 10,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        background: '#fff',
+        padding: '30px',
+        borderRadius: '50%',
+        border: '4px solid #e32c2b',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+        minWidth: '220px',
+        height: '220px',
+        justifyContent: 'center',
+        textAlign: 'center'
+      }}>
+        <div style={{ marginBottom: '8px' }}>
+          <Icon source={LockIcon} tone="warning" />
+        </div>
+        <Text variant="headingMd" as="h3">{title}</Text>
+        <div style={{ marginTop: '4px', marginBottom: '12px' }}>
+          <Text variant="bodySm" tone="subdued">Available on {upgradePlanText} plan</Text>
+        </div>
+        <Button onClick={() => window.location.href = '/app/subscription'}>Upgrade</Button>
+      </div>
+    </div>
+  );
+};
 
 const StatIcon = ({ type, color }) => {
   const icons = {
@@ -116,7 +157,7 @@ function UsageBar({ label, used, limit }) {
   );
 }
 
-const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Your store", limits, usage }) => {
+const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Your store", limits, usage, planId, features = {} }) => {
   const navigate = useNavigate();
   const totalRequests = stats?.totalRequests ?? 0;
   const pending = stats?.pending ?? 0;
@@ -236,7 +277,7 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
                   <svg viewBox="0 0 500 150" width="100%" height="200px" preserveAspectRatio="none">
                     <defs>
                       <linearGradient id="trendGradient" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="0%" stopColor="#fa3200" stopOpacity="0.2" />
+                        <stop offset="0%" stopColor="#0400fa" stopOpacity="0.2" />
                         <stop offset="100%" stopColor="#008060" stopOpacity="0" />
                       </linearGradient>
                     </defs>
@@ -335,6 +376,7 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
           <InlineGrid columns={{ xs: 1, md: ["twoThirds", "oneThird"] }} gap="400">
             {/* Performance Overview */}
             <Card>
+              <FeatureLock isLocked={!features.analytics} title="Advanced Reports" upgradePlanText="Basic">
               <BlockStack gap="400">
                 <Text as="h2" variant="headingMd">
                   Performance Overview
@@ -393,6 +435,7 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
                   )}
                 </BlockStack>
               </BlockStack>
+              </FeatureLock>
             </Card>
 
             {/* Recent Activity */}
@@ -433,94 +476,125 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
 
         {/* ─── Quick Actions ─── */}
         <Layout.Section>
-          <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">Quick Actions</Text>
-              <Divider />
-              <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
-
-                {/* Customize Button Design */}
-                <button
-                  type="button"
-                  onClick={() => navigate("/app/button-settings")}
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 12,
-                    padding: "32px 20px",
-                    background: "linear-gradient(135deg, #2c6ecb 0%, #1a4fa0 100%)",
-                    border: "none",
-                    borderRadius: 12,
-                    color: "#fff",
-                    cursor: "pointer",
-                    transition: "transform 0.15s ease, box-shadow 0.15s ease",
-                    boxShadow: "0 4px 14px rgba(44,110,203,0.35)",
-                    fontSize: 15,
-                    fontWeight: 600,
-                    letterSpacing: "0.01em",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = "translateY(-2px)";
-                    e.currentTarget.style.boxShadow = "0 8px 24px rgba(44,110,203,0.45)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "translateY(0)";
-                    e.currentTarget.style.boxShadow = "0 4px 14px rgba(44,110,203,0.35)";
-                  }}
-                >
-                  {/* Paintbrush icon */}
-                  <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L4.52 13.15a2 2 0 000 2.83l3.5 3.5a2 2 0 002.83 0L19.39 11a5.5 5.5 0 001.45-5.39z"/>
-                    <path d="M4 20 L8 16"/>
-                    <circle cx="4.5" cy="20.5" r="1.5"/>
-                  </svg>
-                  Customize Button Design
-                </button>
-
-                {/* Edit Email Template */}
-                <button
-                  type="button"
-                  onClick={() => navigate("/app/email-template")}
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 12,
-                    padding: "32px 20px",
-                    background: "linear-gradient(135deg, #2c6ecb 0%, #1a4fa0 100%)",
-                    border: "none",
-                    borderRadius: 12,
-                    color: "#fff",
-                    cursor: "pointer",
-                    transition: "transform 0.15s ease, box-shadow 0.15s ease",
-                    boxShadow: "0 4px 14px rgba(44,110,203,0.35)",
-                    fontSize: 15,
-                    fontWeight: 600,
-                    letterSpacing: "0.01em",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = "translateY(-2px)";
-                    e.currentTarget.style.boxShadow = "0 8px 24px rgba(44,110,203,0.45)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "translateY(0)";
-                    e.currentTarget.style.boxShadow = "0 4px 14px rgba(44,110,203,0.35)";
-                  }}
-                >
-                  {/* Envelope icon */}
-                  <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="4" width="20" height="16" rx="2"/>
-                    <path d="M2 7l10 7 10-7"/>
-                  </svg>
-                  Edit Email Template
-                </button>
-
-              </InlineGrid>
+          <BlockStack gap="400">
+            <BlockStack gap="100">
+              <Text as="h2" variant="headingLg">Quick Actions</Text>
+              <Text as="p" variant="bodyMd" tone="subdued">Use these quick links to personalize your widget and increase your sales</Text>
             </BlockStack>
-          </Card>
+            
+            <InlineGrid columns={{ xs: 1, sm: 2, md: 2 }} gap="400">
+              
+              {/* Customize Button Design */}
+              <FeatureLock isLocked={!features.customizeWidget} title="Customize Widget" upgradePlanText="Basic">
+              <Card padding="0">
+                <div style={{ 
+                  backgroundColor: '#f0ededff', 
+                  padding: '30px', 
+                  display: 'flex', 
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  borderTopLeftRadius: '8px', 
+                  borderTopRightRadius: '8px' 
+                }}>
+                  <div style={{ 
+                    backgroundColor: '#fff', 
+                    padding: '20px 30px', 
+                    borderRadius: '8px', 
+                    boxShadow: '0 4px 12px rgba(253, 0, 0, 1)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    width: '80%'
+                  }}>
+                    <div style={{ 
+                      background: 'linear-gradient(135deg, #0b3d2c 0%, #1a4fa0 100%)', 
+                      padding: '10px', 
+                      borderRadius: '4px', 
+                      textAlign: 'center', 
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px'
+                    }}>
+                      <svg viewBox="0 0 20 20" width="16" height="16" fill="white">
+                        <path d="M10 0a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm4.7-10.7l-5.5 5.5a1 1 0 01-1.4 0l-2.5-2.5a1 1 0 011.4-1.4l1.8 1.8 4.8-4.8a1 1 0 011.4 1.4z" />
+                      </svg>
+                      <Text as="span" variant="bodyMd" fontWeight="bold" tone="textInverse">Notify me</Text>
+                    </div>
+                    <div style={{ 
+                      border: '1px solid #e1e3e5', 
+                      padding: '10px', 
+                      borderRadius: '4px', 
+                      textAlign: 'center' 
+                    }}>
+                      <Text as="span" variant="bodyMd" tone="subdued" fontWeight="medium">Notify me</Text>
+                    </div>
+                  </div>
+                </div>
+                <Box padding="400">
+                  <BlockStack gap="300">
+                    <Text as="h3" variant="headingMd">Your brand, your style!</Text>
+                    <div style={{ minHeight: '60px' }}>
+                      <Text as="p" tone="subdued">
+                        You can use coding to personalize the widget, form, and email templates to create a visually appealing impression and make them uniquely yours. If you prefer a hand, our team's here to assist.
+                      </Text>
+                    </div>
+                    <InlineStack gap="300">
+                      <Button onClick={() => navigate("/app/button-settings")}>Customize widget</Button>
+                    </InlineStack>
+                  </BlockStack>
+                </Box>
+              </Card>
+              </FeatureLock>
+
+              {/* Edit Email Template */}
+              <FeatureLock isLocked={!features.editEmailTemplate} title="Email Templates" upgradePlanText="Pro">
+              <Card padding="0">
+                <div style={{ 
+                  backgroundColor: '#f0ededff', 
+                  padding: '30px', 
+                  display: 'flex', 
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  borderTopLeftRadius: '8px', 
+                  borderTopRightRadius: '8px' 
+                }}>
+                  <div style={{ 
+                    backgroundColor: '#fff', 
+                    padding: '30px', 
+                    borderRadius: '8px', 
+                    boxShadow: '0 4px 12px rgba(255, 0, 0, 0.81)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '12px',
+                    width: '80%'
+                  }}>
+                    <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="#2c6ecb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                      <polyline points="22,6 12,13 2,6"></polyline>
+                    </svg>
+                    <Text as="span" variant="bodySm" tone="subdued">Reminder notification</Text>
+                  </div>
+                </div>
+                <Box padding="400">
+                  <BlockStack gap="300">
+                    <Text as="h3" variant="headingMd">Increase your sales by sending reminder notifications</Text>
+                    <div style={{ minHeight: '60px' }}>
+                      <Text as="p" tone="subdued">
+                        Reach out to subscribers who have not yet purchased the product while it is still available.
+                      </Text>
+                    </div>
+                    <InlineStack gap="300">
+                      <Button onClick={() => navigate("/app/email-template")}>Edit Email Template</Button>
+                    </InlineStack>
+                  </BlockStack>
+                </Box>
+              </Card>
+              </FeatureLock>
+
+            </InlineGrid>
+          </BlockStack>
         </Layout.Section>
 
       </Layout>

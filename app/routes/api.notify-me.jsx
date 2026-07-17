@@ -104,17 +104,23 @@ export async function action({ request }) {
   try {
     // Accept both JSON and FormData
     let body;
-    const contentType = request.headers.get("Content-Type") || "";
-
-    if (contentType.includes("application/json")) {
-      body = await request.json();
-    } else {
-      const formData = await request.formData();
-      body = Object.fromEntries(formData.entries());
+    const rawText = await request.text();
+    
+    try {
+      body = JSON.parse(rawText);
+    } catch {
+      const params = new URLSearchParams(rawText);
+      body = Object.fromEntries(params.entries());
     }
 
     console.log("[api/notify-me] Incoming Body:", body);
     console.log("[api/notify-me] URL:", request.url);
+    
+    // DEBUG LOGGING
+    try {
+      const fs = require('fs');
+      fs.appendFileSync('C:\\Back-in-stock\\Back-in-stock\\debug.log', JSON.stringify({ url: request.url, rawText, body }) + '\\n');
+    } catch(e) {}
 
     const { shop: bodyShop, email, productId, variantId, productTitle, variantTitle } = body;
     

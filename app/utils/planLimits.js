@@ -11,18 +11,22 @@ export const PLAN_LIMITS = {
   free: {
     subscribers: 35,
     notifications: 25,
+    features: { analytics: false, customizeWidget: false, editEmailTemplate: false },
   },
   basic: {
     subscribers: 500,
     notifications: 1000,
+    features: { analytics: true, customizeWidget: true, editEmailTemplate: false },
   },
   pro: {
     subscribers: 5000,
     notifications: 10000,
+    features: { analytics: true, customizeWidget: true, editEmailTemplate: true },
   },
   enterprise: {
     subscribers: null, // unlimited
     notifications: null,
+    features: { analytics: true, customizeWidget: true, editEmailTemplate: true },
   },
 };
 
@@ -46,6 +50,14 @@ export function resolvePlanId(subscriptionName) {
  */
 export function getLimitsForPlan(planId) {
   return PLAN_LIMITS[planId] || PLAN_LIMITS.free;
+}
+
+/**
+ * Gets the features included in a plan by ID.
+ * @param {"free"|"basic"|"pro"|"enterprise"} planId
+ */
+export function getFeaturesForPlan(planId) {
+  return PLAN_LIMITS[planId]?.features || PLAN_LIMITS.free.features;
 }
 
 /**

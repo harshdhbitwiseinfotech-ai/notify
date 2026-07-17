@@ -98,6 +98,8 @@ model EmailTemplate {
   bodyHtml       String   @default("")
   brandLogoUrl   String   @default("")
   ctaButtonText  String   @default("Shop Now")
+  bannerColor    String   @default("#6D28D9")
+  headingColor   String   @default("#FFFFFF")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

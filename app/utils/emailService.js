@@ -86,6 +86,11 @@ export async function sendRestockEmail({
   const variantText = variantTitle && variantTitle !== "Default Title" ? ` — ${variantTitle}` : "";
   const fullTitle = `${productTitle}${variantText}`;
 
+  const displayName = customerName || "Customer";
+  const headerTitle = "Back In Stock";
+  const headerSubtitle = "The wait is over.";
+  const buttonText = "Shop Now";
+
   let subject = `🎉 Good news! ${productTitle} is back in stock!`;
   let html = `
     <!DOCTYPE html>
@@ -166,22 +171,42 @@ export async function sendRestockEmail({
         resolvedSubject = resolvedSubject.split(tag).join(val);
       }
       
-      const logoHtml = template.brandLogoUrl
-        ? `<div style="text-align:center;padding:20px 0 10px;"><img src="${template.brandLogoUrl}" alt="Brand" style="max-height:70px;max-width:220px;" /></div>`
-        : `<div style="text-align:center;padding:20px 0 10px;font-size:22px;font-weight:700;color:#2c6ecb;letter-spacing:-0.5px;">${shop}</div>`;
+      const bannerColor = template.bannerColor || "#6d28d9";
+      const headingColor = template.headingColor || "#ffffff";
+      
+      const bannerHtml = `
+        <div style="background-color:${bannerColor}; padding: 42px 32px 30px; text-align: center; color: ${headingColor}; border-top-left-radius: 24px; border-top-right-radius: 24px;">
+          <h1 style="margin: 0; font-size: 32px; letter-spacing: -0.03em; line-height: 1.1;">Back In Stock!</h1>
+          <p style="margin: 10px auto 0; font-size: 15px; opacity: 0.9; max-width: 380px;">Your Wait is Over</p>
+        </div>
+      `;
+
+      const productCardHtml = `
+        <div style="border: 1px solid #e5e7eb; border-radius: 20px; overflow: hidden; text-align: center; margin: 28px 0;">
+          ${productImage ? `<img src="${productImage}" alt="${fullTitle}" style="width: auto; max-width: 100%; display: block; margin: 0 auto; object-fit: cover; border-bottom: 1px solid #e5e7eb;" />` : ''}
+          <div style="padding: 24px 22px; text-align: center;">
+            <h2 style="margin: 0; font-size: 16px; font-weight: 700; color: #111827;">${fullTitle}</h2>
+          </div>
+        </div>
+      `;
 
       const ctaHtml = `<div style="text-align:center;margin:24px 0;">
-        <a href="${productUrl}" style="display:inline-block;background:#2c6ecb;color:#fff;text-decoration:none;padding:13px 36px;border-radius:6px;font-weight:600;font-size:15px;">${template.ctaButtonText || "Shop Now"}</a>
+        <a href="${productUrl}" style="display:inline-block;background:${bannerColor};color:#fff;text-decoration:none;padding:15px 34px;border-radius:999px;font-weight:700;font-size:15px;">${template.ctaButtonText || "Shop Now"}</a>
       </div>`;
 
       html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Back In Stock</title></head>
       <body style="font-family:Arial,sans-serif;background:#f3f4f6;margin:0;padding:24px 0;">
-        <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
-          ${logoHtml}
-          <div style="padding:24px 32px;color:#333;line-height:1.75;font-size:15px;">${resolvedBody}</div>
-          ${ctaHtml}
-          <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:16px 32px;text-align:center;font-size:12px;color:#9ca3af;">
-            <p style="margin:0;">© ${new Date().getFullYear()} ${shop}. All rights reserved.</p>
+        <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:24px;overflow:hidden;box-shadow:0 18px 50px rgba(15, 23, 42, 0.08);">
+          ${bannerHtml}
+          <div style="padding:32px;color:#4b5563;line-height:1.75;font-size:15px;">
+            <div style="font-size: 17px; font-weight: 700; margin-bottom: 12px; color: #111827;">Hi ${displayName},</div>
+            ${resolvedBody}
+            ${productCardHtml}
+            ${ctaHtml}
+          </div>
+          <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 32px 30px;text-align:center;font-size:13px;color:#9ca3af;">
+            <p style="margin:0 0 10px 0;">© ${new Date().getFullYear()} ${shop.replace(/^https?:\/\//, '')}. All rights reserved.</p>
+            <a href="${productUrl}" style="color:${bannerColor};text-decoration:none;font-weight:600;">Unsubscribe</a>
           </div>
         </div>
       </body></html>`;

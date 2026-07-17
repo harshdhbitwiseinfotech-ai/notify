@@ -88,8 +88,41 @@
     if (document.getElementById(CONTAINER_ID)) return; // already injected
 
     injectForm(product, currentVariant);
+    
+    // Fetch button settings from our app and apply them
+    fetch(BACKEND_URL + "?shop=" + encodeURIComponent(shop))
+      .then(function(res) { return res.json(); })
+      .then(function(settings) {
+        if (settings && !settings.error) {
+          applyButtonSettings(settings);
+        }
+      })
+      .catch(function(err) {
+        console.warn("[BIS] Could not load button settings:", err);
+      });
+
     updateUI(product, currentVariant);
     listenForVariantChanges(product, shop);
+  }
+
+  function applyButtonSettings(settings) {
+    var btn = document.getElementById("bis-submit-btn");
+    if (!btn) return;
+
+    var p = settings.buttonSize === "small" ? "6px 14px" : settings.buttonSize === "large" ? "14px 36px" : "10px 24px";
+    var fz = settings.fontSize ? settings.fontSize + "px" : (settings.buttonSize === "small" ? "12px" : settings.buttonSize === "large" ? "18px" : "14px");
+
+    btn.style.background = settings.primaryColor || "#0061FF";
+    btn.style.color = settings.textColor || "#ffffff";
+    btn.style.borderRadius = (settings.borderRadius !== undefined ? settings.borderRadius : 6) + "px";
+    btn.style.fontFamily = settings.fontFamily || "inherit";
+    btn.style.fontSize = fz;
+    btn.style.padding = p;
+    btn.textContent = settings.buttonText || "Notify Me When Available";
+    
+    // update hover effect colors based on primaryColor if possible, or just remove inline hover if we want,
+    // but the script already sets hover via event listeners, so let's update those as well.
+    btn.dataset.defaultBg = settings.primaryColor || "#0061FF";
   }
 
   // ── Build & inject the "Notify Me" form HTML ───────────────────────────────
@@ -171,10 +204,15 @@
     if (submitBtn) {
       submitBtn.addEventListener("click", function () { handleSubmit(product); });
       submitBtn.addEventListener("mouseover", function () {
-        if (!this.disabled) this.style.background = "#0047CC";
+        if (!this.disabled) {
+          var bg = this.dataset.defaultBg || "#0061FF";
+          this.style.opacity = "0.8";
+        }
       });
       submitBtn.addEventListener("mouseout", function () {
-        if (!this.disabled) this.style.background = "#0061FF";
+        if (!this.disabled) {
+          this.style.opacity = "1";
+        }
       });
     }
   }
@@ -202,7 +240,15 @@
     var msg = document.getElementById("bis-status-msg");
     if (msg) { msg.style.display = "none"; msg.textContent = ""; }
     var btn = document.getElementById("bis-submit-btn");
-    if (btn) { btn.textContent = "Notify Me When Available"; btn.disabled = false; }
+    if (btn) { 
+       // Don't override textContent if settings were applied, but we don't have settings here easily.
+       // It's safer to just enable it. The text is already what we want.
+       if(btn.textContent === "Submitting…") {
+           // We might need to restore it to the original text. Let's just restore if we know it.
+           // Or just leave it as is, and on submit failure it's restored.
+       }
+       btn.disabled = false; 
+    }
 
     // Hide / show native Add-to-Cart + Buy Now buttons
     toggleNativeButtons(isSoldOut);
@@ -320,7 +366,11 @@
     ).toLowerCase().trim();
 
     // Loading state
-    if (submitBtn) { submitBtn.textContent = "Submitting…"; submitBtn.disabled = true; }
+    if (submitBtn) { 
+      submitBtn.dataset.originalText = submitBtn.textContent;
+      submitBtn.textContent = "Submitting…"; 
+      submitBtn.disabled = true; 
+    }
     if (msg) msg.style.display = "none";
 
     fetch(BACKEND_URL, {
@@ -356,7 +406,11 @@
             msg.style.display = "block";
             msg.textContent = result.data.error || result.data.message || "Something went wrong.";
           }
-          if (submitBtn) { submitBtn.textContent = "Notify Me When Available"; submitBtn.disabled = false; }
+          if (submitBtn) { 
+            var oldText = submitBtn.dataset.originalText || "Notify Me When Available";
+            submitBtn.textContent = oldText; 
+            submitBtn.disabled = false; 
+          }
         }
       })
       .catch(function (err) {
@@ -366,7 +420,11 @@
           msg.style.display = "block";
           msg.textContent = "Network error. Please try again.";
         }
-        if (submitBtn) { submitBtn.textContent = "Notify Me When Available"; submitBtn.disabled = false; }
+        if (submitBtn) { 
+          var oldText = submitBtn.dataset.originalText || "Notify Me When Available";
+          submitBtn.textContent = oldText; 
+          submitBtn.disabled = false; 
+        }
       });
   }
 

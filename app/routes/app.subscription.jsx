@@ -35,49 +35,23 @@ import { resolvePlanId, getLimitsForPlan, getShopUsage } from "../utils/planLimi
 
 // ── Loader ────────────────────────────────────────────────────────────────────
 export const loader = async ({ request }) => {
-  const { billing, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  // ── Check active billing subscription ─────────────────────────────────────
-  let billingCheck;
-  try {
-    billingCheck = await billing.check({
-      plans: [
-        "Basic Monthly",
-        "Basic Yearly",
-        "Pro Monthly",
-        "Pro Yearly",
-        "Enterprise Monthly",
-        "Enterprise Yearly",
-      ],
-      isTest: true,
-    });
-  } catch (e) {
-    console.error("[subscription/loader] billing.check error:", e);
-    billingCheck = { hasActivePayment: false, appSubscriptions: [] };
-  }
+  // ── BYPASS SHOPIFY BILLING FOR TESTING ────────────────────────────────────
+  const store = await prisma.store.upsert({
+    where: { shop },
+    update: {},
+    create: {
+      shop,
+      plan: "Free",
+      isActive: true,
+    },
+  });
 
-  const activeSubscription = billingCheck.hasActivePayment
-    ? billingCheck.appSubscriptions[0]
-    : null;
-
-  const planId = resolvePlanId(activeSubscription?.name);
+  const activeSubscriptionName = (!store.plan || store.plan === "none") ? "Free" : store.plan;
+  const planId = resolvePlanId(activeSubscriptionName);
   const limits = getLimitsForPlan(planId);
-
-  // ── Sync plan to Store model so other endpoints can enforce limits ─────────
-  try {
-    await prisma.store.upsert({
-      where: { shop },
-      update: { plan: activeSubscription?.name || "free", isActive: true },
-      create: {
-        shop,
-        plan: activeSubscription?.name || "free",
-        isActive: true,
-      },
-    });
-  } catch (e) {
-    console.error("[subscription/loader] store upsert error:", e);
-  }
 
   // ── Real usage from database ───────────────────────────────────────────────
   const usageThisMonth = await getShopUsage(prisma, shop);
@@ -87,12 +61,12 @@ export const loader = async ({ request }) => {
   let price = 0;
   let billingCycleLabel = "monthly";
 
-  if (activeSubscription) {
-    if (activeSubscription.currentPeriodEnd) {
-      nextBillingDate = new Date(activeSubscription.currentPeriodEnd)
-        .toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-    }
-    billingCycleLabel = activeSubscription.name?.includes("Yearly") ? "yearly" : "monthly";
+  if (activeSubscriptionName && activeSubscriptionName !== "Free") {
+    const nextMonth = new Date();
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    nextBillingDate = nextMonth.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+    
+    billingCycleLabel = activeSubscriptionName.includes("Yearly") ? "yearly" : "monthly";
 
     // Map plan → price
     const priceMap = {
@@ -103,38 +77,16 @@ export const loader = async ({ request }) => {
       "Enterprise Monthly": 39.99,
       "Enterprise Yearly": 31.99,
     };
-    price = priceMap[activeSubscription.name] ?? 0;
+    price = priceMap[activeSubscriptionName] ?? 0;
   }
 
-  // ── Billing history from Shopify subscriptions ─────────────────────────────
-  // We use the appSubscriptions list for history. In a real multi-invoice setup
-  // you'd query Shopify's invoices; here we derive from known data.
-  const invoices = billingCheck.appSubscriptions
-    ? billingCheck.appSubscriptions.map((sub, i) => ({
-        id: `SUB-${String(i + 1).padStart(3, "0")}`,
-        date: sub.currentPeriodEnd
-          ? new Date(sub.currentPeriodEnd).toLocaleDateString("en-US")
-          : "-",
-        amount: sub.name
-          ? `$${
-              {
-                "Basic Monthly": "9.99",
-                "Basic Yearly": "7.99",
-                "Pro Monthly": "19.99",
-                "Pro Yearly": "15.99",
-                "Enterprise Monthly": "39.99",
-                "Enterprise Yearly": "31.99",
-              }[sub.name] ?? "0.00"
-            }`
-          : "$0.00",
-        status: "paid",
-      }))
-    : [];
+  // ── Mock invoices for bypass ───────────────────────────────────────────────
+  const invoices = [];
 
   const currentPlan = {
     id: planId,
-    name: activeSubscription ? activeSubscription.name : "Free",
-    status: activeSubscription ? "active" : "free",
+    name: activeSubscriptionName,
+    status: activeSubscriptionName === "Free" ? "free" : "active",
     billingCycle: billingCycleLabel,
     price,
     nextBillingDate,
@@ -147,10 +99,11 @@ export const loader = async ({ request }) => {
 
 // ── Action ────────────────────────────────────────────────────────────────────
 export const action = async ({ request }) => {
-  const { billing, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const formData = await request.formData();
   const plan = formData.get("plan");
   const actionType = formData.get("actionType");
+  const shop = session.shop;
 
   const ALL_PLANS = [
     "Basic Monthly",
@@ -163,27 +116,10 @@ export const action = async ({ request }) => {
 
   // ── Cancel / downgrade to Free ─────────────────────────────────────────────
   if (actionType === "cancel" || plan === "Free") {
-    let billingCheck;
-    try {
-      billingCheck = await billing.check({ plans: ALL_PLANS, isTest: true });
-    } catch (e) {
-      console.error("[subscription/action] billing.check error:", e);
-      return { success: false, error: "Could not verify subscription." };
-    }
-
-    if (billingCheck.hasActivePayment) {
-      for (const sub of billingCheck.appSubscriptions) {
-        try {
-          await billing.cancel({
-            subscriptionId: sub.id,
-            isTest: true,
-            prorate: true,
-          });
-        } catch (e) {
-          console.error("[subscription/action] billing.cancel error:", e);
-        }
-      }
-    }
+    await prisma.store.update({
+      where: { shop },
+      data: { plan: "Free" }
+    });
     return redirect("/app/subscription");
   }
 
@@ -193,16 +129,15 @@ export const action = async ({ request }) => {
   }
 
   try {
-    // billing.request() returns a redirect response to Shopify's billing page.
-    // We must return it directly so the browser follows the redirect.
-    return await billing.request({
-      plan,
-      isTest: true,
-      returnUrl: `${process.env.SHOPIFY_APP_URL}/app/subscription`,
+    // BYPASS FOR TESTING
+    await prisma.store.update({
+      where: { shop },
+      data: { plan: plan }
     });
+    return redirect("/app/subscription");
   } catch (e) {
-    console.error("[subscription/action] billing.request error:", e);
-    return { success: false, error: "Failed to initiate billing. Please try again." };
+    console.error("[subscription/action] billing error:", e);
+    return { success: false, error: "Failed to update plan." };
   }
 };
 
@@ -221,6 +156,8 @@ const PLANS = [
       { label: "25 notifications/month", included: true },
       { label: "Email notifications", included: true },
       { label: "Analytics dashboard", included: false },
+      { label: "Cutomize widget", included: false },
+      { label: "Edit Emails Templates",included: false },
     ],
     limits: { subscribers: 35, notifications: 25 },
   },
@@ -236,9 +173,9 @@ const PLANS = [
       { label: "Up to 100 subscribers", included: true },
       { label: "1,000 notifications/month", included: true },
       { label: "Email notifications", included: true },
-      { label: "Analytics dashboard", included: true },
-      { label: "Priority support", included: false },
-      { label: "Custom email templates", included: false },
+      { label: "Analytics dashboard", included: true },     
+      { label: "cutomize widget", included: true },
+      { label: "Edit Emails Templates",included: false },
     ],
     limits: { subscribers: 500, notifications: 1000 },
   },
@@ -251,13 +188,12 @@ const PLANS = [
     description: "For scaling stores that need powerful automation and insights.",
     color: "#0071E3",
     features: [
-      { label: "Up to 1,000 subscribers", included: true },
+      { label: "Up to 5,000 subscribers", included: true },
       { label: "10,000 notifications/month", included: true },
       { label: "Email notifications", included: true },
-      { label: "SMS notifications", included: true },
       { label: "Analytics dashboard", included: true },
-      { label: "Priority support", included: true },
-      { label: "Custom email templates", included: true },
+      { label: "cutomize widget", included: true },
+      { label: "Edit Emails Templates",included: true },
     ],
     limits: { subscribers: 5000, notifications: 10000 },
   },
@@ -273,10 +209,9 @@ const PLANS = [
       { label: "Unlimited subscribers", included: true },
       { label: "Unlimited notifications", included: true },
       { label: "Email notifications", included: true },
-      { label: "SMS notifications", included: true },
       { label: "Analytics dashboard", included: true },
-      { label: "Dedicated support", included: true },
-      { label: "Custom email templates", included: true },
+      { label: "cutomize widget", included: true },
+      { label: "Edit Emails Templates",included: true },
     ],
     limits: { subscribers: null, notifications: null },
   },

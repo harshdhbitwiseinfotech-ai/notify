@@ -18,7 +18,7 @@ import {
   Banner,
   Box,
   Badge,
-  InlineGrid,
+  InlineGrid, 
   Thumbnail,
 } from "@shopify/polaris";
 
@@ -26,17 +26,8 @@ import {
 
 // ── Default body HTML ─────────────────────────────────────────────────────────
 const defaultBodies = {
-  restock: `<p>Dear {{customer_first_name}},</p>
-<p>The <strong>{{product_name}}</strong> is back and ready to plan your store product save yet.</p>
-<p>We are so glad for completing of using the <strong>{{product_name}}</strong>.</p>
-<br/>
-<p>Best regards,<br/>Dear {{customer_first_name}},</p>
-<p>The {{product_name}}.</p>`,
-  preorder: `<p>Dear {{customer_first_name}},</p>
-<p>We are excited to announce that <strong>{{product_name}}</strong> is now available for pre-order!</p>
-<p>Be the first to get yours before it's available to everyone.</p>
-<br/>
-<p>Best regards,<br/>The {{store_name}} Team</p>`,
+  restock: `Great news! An item you've been waiting for is officially available again. Grab yours before it runs out of stock completely!`,
+  preorder: `We are excited to announce that this product is now available for pre-order! Be the first to get yours before it's available to everyone.`,
 };
 
 // ── Loader ────────────────────────────────────────────────────────────────────
@@ -57,6 +48,8 @@ export const loader = async ({ request }) => {
       bodyHtml: defaultBodies.restock,
       brandLogoUrl: "",
       ctaButtonText: "Shop Now",
+      bannerColor: "#6D28D9",
+      headingColor: "#FFFFFF"
     },
     preorder: preorderTpl || {
       templateType: "preorder",
@@ -64,6 +57,8 @@ export const loader = async ({ request }) => {
       bodyHtml: defaultBodies.preorder,
       brandLogoUrl: "",
       ctaButtonText: "Pre-Order Now",
+      bannerColor: "#6D28D9",
+      headingColor: "#FFFFFF"
     },
     smtpUser: process.env.SMTP_USER || "",
   };
@@ -83,11 +78,13 @@ export const action = async ({ request }) => {
     const bodyHtml      = formData.get("bodyHtml")      || "";
     const brandLogoUrl  = formData.get("brandLogoUrl")  || "";
     const ctaButtonText = formData.get("ctaButtonText") || "Shop Now";
+    const bannerColor   = formData.get("bannerColor")   || "#6D28D9";
+    const headingColor  = formData.get("headingColor")  || "#FFFFFF";
 
     await prisma.emailTemplate.upsert({
       where: { shop_templateType: { shop, templateType } },
-      update: { subjectLine, bodyHtml, brandLogoUrl, ctaButtonText },
-      create: { shop, templateType, subjectLine, bodyHtml, brandLogoUrl, ctaButtonText },
+      update: { subjectLine, bodyHtml, brandLogoUrl, ctaButtonText, bannerColor, headingColor },
+      create: { shop, templateType, subjectLine, bodyHtml, brandLogoUrl, ctaButtonText, bannerColor, headingColor },
     });
 
     return { success: true, intent: "save" };
@@ -96,10 +93,13 @@ export const action = async ({ request }) => {
   // ── Send test email ──
   if (intent === "send-test") {
     const testEmail     = formData.get("testEmail")     || "";
+    const templateType  = formData.get("templateType")  || "restock";
     const subjectLine   = formData.get("subjectLine")   || "";
     const bodyHtml      = formData.get("bodyHtml")      || "";
     const brandLogoUrl  = formData.get("brandLogoUrl")  || "";
     const ctaButtonText = formData.get("ctaButtonText") || "Shop Now";
+    const bannerColor   = formData.get("bannerColor")   || "#6D28D9";
+    const headingColor  = formData.get("headingColor")  || "#FFFFFF";
 
     if (!testEmail) return { success: false, error: "Please enter a test email address." };
 
@@ -119,22 +119,39 @@ export const action = async ({ request }) => {
       resolvedSubject = resolvedSubject.split(tag).join(val);
     }
 
-    const logoHtml = brandLogoUrl
-      ? `<div style="text-align:center;padding:20px 0 10px;"><img src="${brandLogoUrl}" alt="Brand" style="max-height:70px;max-width:220px;" /></div>`
-      : `<div style="text-align:center;padding:20px 0 10px;font-size:22px;font-weight:700;color:#2c6ecb;letter-spacing:-0.5px;">${shop}</div>`;
+    const bannerHtml = `
+      <div style="background-color:${bannerColor}; padding: 42px 32px 30px; text-align: center; color: ${headingColor};">
+        <h1 style="margin: 0; font-size: 32px; letter-spacing: -0.03em; line-height: 1.1;">${templateType === 'restock' ? 'Back In Stock!' : 'Pre-order Alert!'}</h1>
+        <p style="margin: 10px auto 0; font-size: 15px; opacity: 0.9; max-width: 380px;">Your Wait is Over</p>
+      </div>
+    `;
+
+    const productCardHtml = `
+      <div style="border: 1px solid #e5e7eb; border-radius: 20px; overflow: hidden; text-align: center; margin: 28px 0;">
+        <img src="https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png" alt="Sample" style="width: auto; max-width: 100%; display: block; margin: 0 auto; object-fit: cover; border-bottom: 1px solid #e5e7eb;" />
+        <div style="padding: 24px 22px; text-align: center;">
+          <h2 style="margin: 0; font-size: 16px; font-weight: 700; color: #111827;">Sample Product</h2>
+        </div>
+      </div>
+    `;
 
     const ctaHtml = `<div style="text-align:center;margin:24px 0;">
-      <a href="https://${shop}" style="display:inline-block;background:#2c6ecb;color:#fff;text-decoration:none;padding:13px 36px;border-radius:6px;font-weight:600;font-size:15px;">${ctaButtonText}</a>
+      <a href="https://${shop}" style="display:inline-block;background:${bannerColor};color:#fff;text-decoration:none;padding:15px 34px;border-radius:999px;font-weight:700;font-size:15px;">${ctaButtonText}</a>
     </div>`;
 
     const fullHtml = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Back In Stock</title></head>
     <body style="font-family:Arial,sans-serif;background:#f3f4f6;margin:0;padding:24px 0;">
-      <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
-        ${logoHtml}
-        <div style="padding:24px 32px;color:#333;line-height:1.75;font-size:15px;">${resolvedBody}</div>
-        ${ctaHtml}
-        <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:16px 32px;text-align:center;font-size:12px;color:#9ca3af;">
-          <p style="margin:0;">© ${new Date().getFullYear()} ${shop}. All rights reserved.</p>
+      <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:24px;overflow:hidden;box-shadow:0 18px 50px rgba(15, 23, 42, 0.08);">
+        ${bannerHtml}
+        <div style="padding:32px;color:#4b5563;line-height:1.75;font-size:15px;">
+          <div style="font-size: 17px; font-weight: 700; margin-bottom: 12px; color: #111827;">Hi John,</div>
+          ${resolvedBody}
+          ${productCardHtml}
+          ${ctaHtml}
+        </div>
+        <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 32px 30px;text-align:center;font-size:13px;color:#9ca3af;">
+          <p style="margin:0 0 10px 0;">© ${new Date().getFullYear()} ${shop}. All rights reserved.</p>
+          <a href="#" style="color:${bannerColor};text-decoration:none;font-weight:600;">Unsubscribe</a>
         </div>
       </div>
     </body></html>`;
@@ -233,6 +250,8 @@ export default function EmailTemplatePage() {
   const [bodyHtml,     setBodyHtml]     = useState(restock.bodyHtml);
   const [brandLogo,    setBrandLogo]    = useState(restock.brandLogoUrl);
   const [ctaText,      setCtaText]      = useState(restock.ctaButtonText);
+  const [bannerColor,  setBannerColor]  = useState(restock.bannerColor || "#6D28D9");
+  const [headingColor, setHeadingColor] = useState(restock.headingColor || "#FFFFFF");
   const [testEmail,    setTestEmail]    = useState(smtpUser || "");
   const [banner,       setBanner]       = useState(null);  // { tone, msg }
 
@@ -247,6 +266,8 @@ export default function EmailTemplatePage() {
     setBodyHtml(tpl.bodyHtml);
     setBrandLogo(tpl.brandLogoUrl);
     setCtaText(tpl.ctaButtonText);
+    setBannerColor(tpl.bannerColor || "#6D28D9");
+    setHeadingColor(tpl.headingColor || "#FFFFFF");
   };
 
   // Keep editor in sync when switching templates
@@ -307,6 +328,8 @@ export default function EmailTemplatePage() {
     fd.append("bodyHtml",      editorRef.current?.innerHTML || bodyHtml);
     fd.append("brandLogoUrl",  brandLogo);
     fd.append("ctaButtonText", ctaText);
+    fd.append("bannerColor",   bannerColor);
+    fd.append("headingColor",  headingColor);
     submit(fd, { method: "post" });
     setBanner({ tone: "success", msg: "Template saved successfully!" });
     setTimeout(() => setBanner(null), 4000);
@@ -327,6 +350,8 @@ export default function EmailTemplatePage() {
     fd.append("bodyHtml",      editorRef.current?.innerHTML || bodyHtml);
     fd.append("brandLogoUrl",  brandLogo);
     fd.append("ctaButtonText", ctaText);
+    fd.append("bannerColor",   bannerColor);
+    fd.append("headingColor",  headingColor);
     submit(fd, { method: "post" });
     setBanner({ tone: "info", msg: `Test email sending to ${testEmail}…` });
     setTimeout(() => setBanner(null), 6000);
@@ -426,14 +451,11 @@ export default function EmailTemplatePage() {
                   />
                 </div>
 
-                {/* Contenteditable Editor */}
                 <div
                   ref={editorRef}
                   contentEditable
                   suppressContentEditableWarning
-                  onInput={syncBody}
                   onBlur={syncBody}
-                  dangerouslySetInnerHTML={{ __html: bodyHtml }}
                   style={{
                     minHeight: 320,
                     border: "1px solid #c9cccf",
@@ -575,6 +597,36 @@ export default function EmailTemplatePage() {
                   autoComplete="off"
                   helpText="Text on the button inside the email"
                 />
+
+                <Divider />
+
+                <InlineGrid columns={2} gap="400">
+                  <BlockStack gap="200">
+                    <Text as="p" variant="bodyMd" fontWeight="semibold">Banner Background Color</Text>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <input 
+                        type="color" 
+                        value={bannerColor} 
+                        onChange={(e) => setBannerColor(e.target.value)} 
+                        style={{ width: 40, height: 40, padding: 0, border: 'none', cursor: 'pointer', borderRadius: 4 }} 
+                      />
+                      <Text as="p">{bannerColor}</Text>
+                    </div>
+                  </BlockStack>
+
+                  <BlockStack gap="200">
+                    <Text as="p" variant="bodyMd" fontWeight="semibold">Heading Text Color</Text>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <input 
+                        type="color" 
+                        value={headingColor} 
+                        onChange={(e) => setHeadingColor(e.target.value)} 
+                        style={{ width: 40, height: 40, padding: 0, border: 'none', cursor: 'pointer', borderRadius: 4 }} 
+                      />
+                      <Text as="p">{headingColor}</Text>
+                    </div>
+                  </BlockStack>
+                </InlineGrid>
 
                 <Divider />
 
