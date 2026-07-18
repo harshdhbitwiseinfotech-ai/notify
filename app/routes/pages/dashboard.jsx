@@ -21,7 +21,7 @@ import { LockIcon } from "@shopify/polaris-icons";
 
 const FeatureLock = ({ isLocked, title, upgradePlanText, children }) => {
   if (!isLocked) return <>{children}</>;
-  
+
   return (
     <div style={{ position: 'relative' }}>
       <div style={{ filter: 'blur(3px)', opacity: 0.5, pointerEvents: 'none' }}>
@@ -377,64 +377,64 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
             {/* Performance Overview */}
             <Card>
               <FeatureLock isLocked={!features.analytics} title="Advanced Reports" upgradePlanText="Basic">
-              <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Performance Overview
-                </Text>
-                <Divider />
-                <BlockStack gap="200">
-                  <Text as="p" variant="bodyMd" fontWeight="semibold">
-                    Notification health metrics
-                  </Text>
-                  <Text as="p" tone="subdued" variant="bodySm">
-                    Review request completion and backlog for your store notification flow.
-                  </Text>
-                </BlockStack>
-
-                <BlockStack gap="100">
-                  <Text as="p" variant="bodyMd" fontWeight="semibold">
-                    Notification completion
-                  </Text>
-                  <Text as="p" tone="subdued" variant="bodySm">
-                    {calculatedCompletionPercent}% of all requests are completed.
-                  </Text>
-                  <ProgressBar progress={calculatedCompletionPercent} size="small" />
-                </BlockStack>
-
-                <BlockStack gap="100">
-                  <Text as="p" variant="bodyMd" fontWeight="semibold">
-                    Pending notification backlog
-                  </Text>
-                  <Text as="p" tone="subdued" variant="bodySm">
-                    {calculatedPendingPercent}% of requests are still waiting for notification.
-                  </Text>
-                  <ProgressBar progress={calculatedPendingPercent} size="small" tone="highlight" />
-                </BlockStack>
-
-                <Box paddingBlockStart="400">
-                  <Divider />
-                </Box>
-                
                 <BlockStack gap="400">
-                  <Text as="h3" variant="headingMd">
-                    Usage This Month
+                  <Text as="h2" variant="headingMd">
+                    Performance Overview
                   </Text>
-                  {limits && usage && (
-                    <BlockStack gap="300">
-                      <UsageBar
-                        label="Subscribers"
-                        used={usage.subscribers}
-                        limit={limits.subscribers}
-                      />
-                      <UsageBar
-                        label="Notifications Sent"
-                        used={usage.notifications}
-                        limit={limits.notifications}
-                      />
-                    </BlockStack>
-                  )}
+                  <Divider />
+                  <BlockStack gap="200">
+                    <Text as="p" variant="bodyMd" fontWeight="semibold">
+                      Notification health metrics
+                    </Text>
+                    <Text as="p" tone="subdued" variant="bodySm">
+                      Review request completion and backlog for your store notification flow.
+                    </Text>
+                  </BlockStack>
+
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodyMd" fontWeight="semibold">
+                      Notification completion
+                    </Text>
+                    <Text as="p" tone="subdued" variant="bodySm">
+                      {calculatedCompletionPercent}% of all requests are completed.
+                    </Text>
+                    <ProgressBar progress={calculatedCompletionPercent} size="small" />
+                  </BlockStack>
+
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodyMd" fontWeight="semibold">
+                      Pending notification backlog
+                    </Text>
+                    <Text as="p" tone="subdued" variant="bodySm">
+                      {calculatedPendingPercent}% of requests are still waiting for notification.
+                    </Text>
+                    <ProgressBar progress={calculatedPendingPercent} size="small" tone="highlight" />
+                  </BlockStack>
+
+                  <Box paddingBlockStart="400">
+                    <Divider />
+                  </Box>
+
+                  <BlockStack gap="400">
+                    <Text as="h3" variant="headingMd">
+                      Usage This Month
+                    </Text>
+                    {limits && usage && (
+                      <BlockStack gap="300">
+                        <UsageBar
+                          label="Subscribers"
+                          used={usage.subscribers}
+                          limit={limits.subscribers}
+                        />
+                        <UsageBar
+                          label="Notifications Sent"
+                          used={usage.notifications}
+                          limit={limits.notifications}
+                        />
+                      </BlockStack>
+                    )}
+                  </BlockStack>
                 </BlockStack>
-              </BlockStack>
               </FeatureLock>
             </Card>
 
@@ -481,116 +481,116 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
               <Text as="h2" variant="headingLg">Quick Actions</Text>
               <Text as="p" variant="bodyMd" tone="subdued">Use these quick links to personalize your widget and increase your sales</Text>
             </BlockStack>
-            
+
             <InlineGrid columns={{ xs: 1, sm: 2, md: 2 }} gap="400">
-              
+
               {/* Customize Button Design */}
               <FeatureLock isLocked={!features.customizeWidget} title="Customize Widget" upgradePlanText="Basic">
-              <Card padding="0">
-                <div style={{ 
-                  backgroundColor: 'rgba(245, 205, 74, 0.51)', 
-                  padding: '30px', 
-                  display: 'flex', 
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  borderTopLeftRadius: '8px', 
-                  borderTopRightRadius: '8px' 
-                }}>
-                  <div style={{ 
-                    backgroundColor: '#fff', 
-                    padding: '20px 30px', 
-                    borderRadius: '8px', 
-                    boxShadow: '0 4px 12px rgba(27, 168, 233, 0.69)',
+                <Card padding="0">
+                  <div style={{
+                    backgroundColor: 'rgba(245, 205, 74, 0.51)',
+                    padding: '30px',
                     display: 'flex',
-                    flexDirection: 'column',
-                    gap: '12px',
-                    width: '80%'
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    borderTopLeftRadius: '8px',
+                    borderTopRightRadius: '8px'
                   }}>
-                    <div style={{ 
-                      background: 'rgba(92, 127, 161, 0.54)', 
-                      padding: '10px', 
-                      borderRadius: '4px', 
-                      textAlign: 'center', 
+                    <div style={{
+                      backgroundColor: '#fff',
+                      padding: '20px 30px',
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 12px rgba(2, 2, 2, 0.99)',
                       display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px'
+                      flexDirection: 'column',
+                      gap: '12px',
+                      width: '80%'
                     }}>
-                      <svg viewBox="0 0 20 20" width="16" height="16" fill="white">
-                        <path d="M10 0a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm4.7-10.7l-5.5 5.5a1 1 0 01-1.4 0l-2.5-2.5a1 1 0 011.4-1.4l1.8 1.8 4.8-4.8a1 1 0 011.4 1.4z" />
-                      </svg>
-                      <Text as="span" variant="bodyMd" fontWeight="bold" tone="textInverse">Notify me</Text>
-                    </div>
-                    <div style={{ 
-                      border: '1px solid rgb(225, 227, 229)', 
-                      padding: '10px', 
-                      borderRadius: '4px', 
-                      textAlign: 'center' 
-                    }}>
-                      <Text as="span" variant="bodyMd" tone="subdued" fontWeight="medium">Notify me</Text>
+                      <div style={{
+                        background: 'rgba(92, 127, 161, 0.54)',
+                        padding: '10px',
+                        borderRadius: '4px',
+                        textAlign: 'center',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px'
+                      }}>
+                        <svg viewBox="0 0 20 20" width="16" height="16" fill="white">
+                          <path d="M10 0a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm4.7-10.7l-5.5 5.5a1 1 0 01-1.4 0l-2.5-2.5a1 1 0 011.4-1.4l1.8 1.8 4.8-4.8a1 1 0 011.4 1.4z" />
+                        </svg>
+                        <Text as="span" variant="bodyMd" fontWeight="bold" tone="textInverse">Notify me</Text>
+                      </div>
+                      <div style={{
+                        border: '1px solid rgb(225, 227, 229)',
+                        padding: '10px',
+                        borderRadius: '4px',
+                        textAlign: 'center'
+                      }}>
+                        <Text as="span" variant="bodyMd" tone="subdued" fontWeight="medium">Notify me</Text>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <Box padding="400">
-                  <BlockStack gap="300">
-                    <Text as="h3" variant="headingMd">Your brand, your style!</Text>
-                    <div style={{ minHeight: '60px' }}>
-                      <Text as="p" tone="subdued">
-                        You can use coding to personalize the widget, form, and email templates to create a visually appealing impression and make them uniquely yours. If you prefer a hand, our team's here to assist.
-                      </Text>
-                    </div>
-                    <InlineStack gap="300">
-                      <Button onClick={() => navigate("/app/button-settings")}>Customize widget</Button>
-                    </InlineStack>
-                  </BlockStack>
-                </Box>
-              </Card>
+                  <Box padding="400">
+                    <BlockStack gap="300">
+                      <Text as="h3" variant="headingMd">Your brand, your style!</Text>
+                      <div style={{ minHeight: '60px' }}>
+                        <Text as="p" tone="subdued">
+                          You can use coding to personalize the widget, form, and email templates to create a visually appealing impression and make them uniquely yours. If you prefer a hand, our team's here to assist.
+                        </Text>
+                      </div>
+                      <InlineStack gap="300">
+                        <Button onClick={() => navigate("/app/button-settings")}>Customize widget</Button>
+                      </InlineStack>
+                    </BlockStack>
+                  </Box>
+                </Card>
               </FeatureLock>
 
               {/* Edit Email Template */}
               <FeatureLock isLocked={!features.editEmailTemplate} title="Email Templates" upgradePlanText="Pro">
-              <Card padding="0">
-                <div style={{ 
-                  backgroundColor: 'rgba(245, 205, 74, 0.51)', 
-                  padding: '30px', 
-                  display: 'flex', 
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  borderTopLeftRadius: '8px', 
-                  borderTopRightRadius: '8px' 
-                }}>
-                  <div style={{ 
-                    backgroundColor: '#ffffff', 
-                    padding: '30px', 
-                    borderRadius: '8px', 
-                    boxShadow: '0 4px 12px rgba(27, 168, 233, 0.69)',
+                <Card padding="0">
+                  <div style={{
+                    backgroundColor: 'rgba(245, 205, 74, 0.51)',
+                    padding: '30px',
                     display: 'flex',
-                    flexDirection: 'column',
+                    justifyContent: 'center',
                     alignItems: 'center',
-                    gap: '12px',
-                    width: '80%'
+                    borderTopLeftRadius: '8px',
+                    borderTopRightRadius: '8px'
                   }}>
-                    <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="#2c6ecb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                      <polyline points="22,6 12,13 2,6"></polyline>
-                    </svg>
-                    <Text as="span" variant="bodySm" tone="subdued">Reminder notification</Text>
-                  </div>
-                </div>
-                <Box padding="400">
-                  <BlockStack gap="300">
-                    <Text as="h3" variant="headingMd">Increase your sales by sending reminder notifications</Text>
-                    <div style={{ minHeight: '60px' }}>
-                      <Text as="p" tone="subdued">
-                        Reach out to subscribers who have not yet purchased the product while it is still available.
-                      </Text>
+                    <div style={{
+                      backgroundColor: '#ffffff',
+                      padding: '30px',
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 12px rgba(0, 0, 0, 1)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '12px',
+                      width: '80%'
+                    }}>
+                      <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="#2c6ecb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                        <polyline points="22,6 12,13 2,6"></polyline>
+                      </svg>
+                      <Text as="span" variant="bodySm" tone="subdued">Reminder notification</Text>
                     </div>
-                    <InlineStack gap="300">
-                      <Button onClick={() => navigate("/app/email-template")}>Edit Email Template</Button>
-                    </InlineStack>
-                  </BlockStack>
-                </Box>
-              </Card>
+                  </div>
+                  <Box padding="400">
+                    <BlockStack gap="300">
+                      <Text as="h3" variant="headingMd">Increase your sales by sending reminder notifications</Text>
+                      <div style={{ minHeight: '60px' }}>
+                        <Text as="p" tone="subdued">
+                          Reach out to subscribers who have not yet purchased the product while it is still available.
+                        </Text>
+                      </div>
+                      <InlineStack gap="300">
+                        <Button onClick={() => navigate("/app/email-template")}>Edit Email Template</Button>
+                      </InlineStack>
+                    </BlockStack>
+                  </Box>
+                </Card>
               </FeatureLock>
 
             </InlineGrid>

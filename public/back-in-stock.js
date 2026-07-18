@@ -88,13 +88,17 @@
     if (document.getElementById(CONTAINER_ID)) return; // already injected
 
     injectForm(product, currentVariant);
-    
-    // Fetch button settings from our app and apply them
+
+    // Fetch button + low-stock settings from our app and apply them
     fetch(BACKEND_URL + "?shop=" + encodeURIComponent(shop))
       .then(function(res) { return res.json(); })
       .then(function(settings) {
         if (settings && !settings.error) {
           applyButtonSettings(settings);
+          // Low stock widget
+          if (settings.lowStockEnabled) {
+            applyLowStockWidget(product, currentVariant, settings);
+          }
         }
       })
       .catch(function(err) {
@@ -109,20 +113,126 @@
     var btn = document.getElementById("bis-submit-btn");
     if (!btn) return;
 
-    var p = settings.buttonSize === "small" ? "6px 14px" : settings.buttonSize === "large" ? "14px 36px" : "10px 24px";
+    var p  = settings.buttonSize === "small" ? "6px 14px" : settings.buttonSize === "large" ? "14px 36px" : "10px 24px";
     var fz = settings.fontSize ? settings.fontSize + "px" : (settings.buttonSize === "small" ? "12px" : settings.buttonSize === "large" ? "18px" : "14px");
 
-    btn.style.background = settings.primaryColor || "#0061FF";
-    btn.style.color = settings.textColor || "#ffffff";
+    btn.style.background   = settings.primaryColor || "#0061FF";
+    btn.style.color        = settings.textColor    || "#ffffff";
     btn.style.borderRadius = (settings.borderRadius !== undefined ? settings.borderRadius : 6) + "px";
-    btn.style.fontFamily = settings.fontFamily || "inherit";
-    btn.style.fontSize = fz;
-    btn.style.padding = p;
-    btn.textContent = settings.buttonText || "Notify Me When Available";
-    
-    // update hover effect colors based on primaryColor if possible, or just remove inline hover if we want,
-    // but the script already sets hover via event listeners, so let's update those as well.
-    btn.dataset.defaultBg = settings.primaryColor || "#0061FF";
+    btn.style.fontFamily   = settings.fontFamily   || "inherit";
+    btn.style.fontSize     = fz;
+    btn.style.padding      = p;
+    btn.textContent        = settings.buttonText   || "Notify Me When Available";
+    btn.dataset.defaultBg  = settings.primaryColor || "#0061FF";
+  }
+
+  // ── Low Stock Alert Widget ──────────────────────────────────────────────────
+  var LOW_STOCK_ID = "bis-low-stock-alert";
+
+  function applyLowStockWidget(product, currentVariant, settings) {
+    // Inject custom CSS once
+    if (settings.lowStockCustomCss) {
+      var style = document.createElement("style");
+      style.id  = "bis-low-stock-css";
+      style.textContent = settings.lowStockCustomCss;
+      document.head.appendChild(style);
+    }
+
+    // Render alert for the initial variant
+    renderLowStockAlert(currentVariant, settings);
+
+    // Re-render on variant changes
+    document.addEventListener("variant:changed", function (e) {
+      if (e.detail && e.detail.variant) {
+        renderLowStockAlert(e.detail.variant, settings);
+      }
+    });
+
+    // Also re-check on URL ?variant= changes via MutationObserver (already running)
+    // We piggy-back by exposing a helper the MO can call:
+    window._bisUpdateLowStock = function(variant) {
+      renderLowStockAlert(variant, settings);
+    };
+  }
+
+  function renderLowStockAlert(variant, settings) {
+    // Remove existing alert
+    var existing = document.getElementById(LOW_STOCK_ID);
+    if (existing) existing.parentNode.removeChild(existing);
+
+    if (!variant) return;
+
+    var qty = variant.inventory_quantity;
+    var threshold = settings.lowStockThreshold || 5;
+
+    // Only show if inventory tracking is on, qty is available and <= threshold
+    if (
+      variant.inventory_management !== "shopify" ||
+      !variant.available ||
+      qty === null ||
+      qty === undefined ||
+      qty > threshold
+    ) return;
+
+    var message = (settings.lowStockMessage || "Only {{remaining_quantity}} items left in stock!")
+      .replace("{{remaining_quantity}}", String(qty));
+
+    var textColor = settings.lowStockTextColor || "#e32c2b";
+    var iconColor = settings.lowStockIconColor || "#e32c2b";
+    var showIcon  = settings.lowStockShowIcon !== false;
+
+    var alertEl = document.createElement("div");
+    alertEl.id  = LOW_STOCK_ID;
+    alertEl.className = "low-stock-alert";
+    alertEl.style.cssText = [
+      "display:flex",
+      "align-items:center",
+      "gap:6px",
+      "margin:8px 0",
+      "padding:8px 12px",
+      "background:" + textColor + "14",
+      "border:1px solid " + textColor + "55",
+      "border-radius:6px",
+      "font-size:13px",
+      "font-weight:500",
+      "color:" + textColor,
+      "font-family:inherit",
+    ].join(";");
+
+    if (showIcon) {
+      var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("viewBox", "0 0 20 20");
+      svg.setAttribute("width", "16");
+      svg.setAttribute("height", "16");
+      svg.setAttribute("fill", iconColor);
+      svg.style.flexShrink = "0";
+      var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", "M10 0a10 10 0 100 20A10 10 0 0010 0zm0 15a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm1-5H9V5h2v5z");
+      svg.appendChild(path);
+      alertEl.appendChild(svg);
+    }
+
+    var span = document.createElement("span");
+    span.textContent = message;
+    alertEl.appendChild(span);
+
+    // Insert before the BIS form container, or before the Add-to-Cart button
+    var bisContainer = document.getElementById(CONTAINER_ID);
+    if (bisContainer && bisContainer.parentNode) {
+      bisContainer.parentNode.insertBefore(alertEl, bisContainer);
+    } else {
+      // fallback: find add-to-cart button area
+      var atcSelectors = [
+        ".product-form__buttons",
+        'button[name="add"]',
+        ".product-form__submit",
+        'form[action*="/cart/add"]',
+      ];
+      for (var i = 0; i < atcSelectors.length; i++) {
+        var el = document.querySelector(atcSelectors[i]);
+        if (el) { el.insertAdjacentElement("beforebegin", alertEl); break; }
+      }
+    }
   }
 
   // ── Build & inject the "Notify Me" form HTML ───────────────────────────────
