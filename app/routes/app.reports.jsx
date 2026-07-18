@@ -42,6 +42,14 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import { resolvePlanId, getFeaturesForPlan } from "../utils/planLimits";
+
+const FEATURE_LOCK_COLORS = {
+  red: "#ff0000",
+  deepRed: "#d60000",
+  danger: "#b91c1c",
+  bright: "#692eac",
+};
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function startOfPeriod(daysAgo) {
@@ -103,6 +111,10 @@ export const loader = async ({ request }) => {
     where: { shop },
     orderBy: { createdAt: "asc" },
   });
+
+  const store = await prisma.store.findUnique({ where: { shop } });
+  const planId = resolvePlanId(store?.plan || "free");
+  const features = getFeaturesForPlan(planId);
 
   // ── Period boundaries ─────────────────────────────────────────────────────
   const now = new Date();
@@ -288,6 +300,7 @@ export const loader = async ({ request }) => {
     MONTHLY_DATA,
     performanceSummary,
     notificationLog,
+    features,
     // summary stat cards
     totalSubscribers: allSubscribers.length,
     totalNotified: allSubscribers.filter((s) => s.notified).length,
@@ -335,6 +348,41 @@ function statusBadge(status) {
   );
 }
 
+function FeatureLock({ isLocked, title, upgradePlanText, children, borderColor = FEATURE_LOCK_COLORS.red }) {
+  if (!isLocked) return <>{children}</>;
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div style={{ filter: 'blur(3px)', opacity: 0.45, pointerEvents: 'none' }}>
+        {children}
+      </div>
+      <div style={{
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        zIndex: 10,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        background: '#ffffff',
+        padding: '30px',
+        borderRadius: '20px',
+        border: `4px solid ${borderColor}`,
+        boxShadow: `0 10px 30px ${borderColor}33`,
+        minWidth: '260px',
+        textAlign: 'center',
+      }}>
+        <Text variant="headingMd" as="h3">{title}</Text>
+        <Text variant="bodyMd" tone="subdued" as="p" style={{ margin: '8px 0 16px' }}>
+          Available on {upgradePlanText} plan
+        </Text>
+        <Button onClick={() => window.location.href = '/app/subscription'}>Upgrade</Button>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function Reports() {
   const {
@@ -343,6 +391,7 @@ export default function Reports() {
     MONTHLY_DATA,
     performanceSummary,
     notificationLog,
+    features,
     totalSubscribers,
     totalNotified,
   } = useLoaderData();
@@ -438,8 +487,8 @@ export default function Reports() {
   return (
     <Page
       title={
-        <Text variant="headingXl" as="h1">
-          Reports
+        <Text variant="heading2xl" as="h1" fontWeight="bold">
+          📋 Reports
         </Text>
       }
       primaryAction={
@@ -493,12 +542,13 @@ export default function Reports() {
               {/* OVERVIEW */}
               {selectedTab === 0 && (
                 <Box padding="400">
-                  <BlockStack gap="500">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <Text as="h3" variant="headingMd">
-                        Subscription &amp; Notification Trends
-                      </Text>
-                      <Select
+                  <FeatureLock isLocked={!features.analytics} title="Advanced Reports" upgradePlanText="Basic" borderColor={FEATURE_LOCK_COLORS.deepRed}>
+                    <BlockStack gap="500">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Text as="h3" variant="headingMd">
+                          Subscription &amp; Notification Trends
+                        </Text>
+                        <Select
                         labelInline
                         label="Period"
                         options={[
@@ -570,9 +620,9 @@ export default function Reports() {
                       </Banner>
                     )}
                   </BlockStack>
-                </Box>
+                </FeatureLock>
+              </Box>
               )}
-
               {/* PRODUCT REPORT */}
               {selectedTab === 1 && (
                 <Box>
@@ -693,43 +743,45 @@ export default function Reports() {
               {/* NOTIFICATION LOG (real data) */}
               {selectedTab === 2 && (
                 <Box padding="400">
-                  <BlockStack gap="400">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <BlockStack gap="100">
-                        <Text as="h3" variant="headingMd">
-                          Recent Notification Activity
-                        </Text>
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          Last {notificationLog.length} notification batches sent to customers
-                        </Text>
-                      </BlockStack>
-                      <Button icon={ExportIcon} size="slim">
-                        Export Log
-                      </Button>
-                    </InlineStack>
+                  <FeatureLock isLocked={!features.notificationLog} title="Recent Notification Activity" upgradePlanText="Pro" borderColor={FEATURE_LOCK_COLORS.deepRed}>
+                    <BlockStack gap="400">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <BlockStack gap="100">
+                          <Text as="h3" variant="headingMd">
+                            Recent Notification Activity
+                          </Text>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            Last {notificationLog.length} notification batches sent to customers
+                          </Text>
+                        </BlockStack>
+                        <Button icon={ExportIcon} size="slim">
+                          Export Log
+                        </Button>
+                      </InlineStack>
 
-                    {notificationRows.length === 0 ? (
-                      <Banner tone="info">
-                        <p>
-                          No notifications have been sent yet. Notifications are
-                          sent automatically when a product comes back in stock.
-                        </p>
-                      </Banner>
-                    ) : (
-                      <DataTable
-                        columnContentTypes={["text", "text", "text", "text", "text"]}
-                        headings={[
-                          "Notification ID",
-                          "Product",
-                          "Recipients",
-                          "Sent",
-                          "Status",
-                        ]}
-                        rows={notificationRows}
-                        hoverable
-                      />
-                    )}
-                  </BlockStack>
+                      {notificationRows.length === 0 ? (
+                        <Banner tone="info">
+                          <p>
+                            No notifications have been sent yet. Notifications are
+                            sent automatically when a product comes back in stock.
+                          </p>
+                        </Banner>
+                      ) : (
+                        <DataTable
+                          columnContentTypes={["text", "text", "text", "text", "text"]}
+                          headings={[
+                            "Notification ID",
+                            "Product",
+                            "Recipients",
+                            "Sent",
+                            "Status",
+                          ]}
+                          rows={notificationRows}
+                          hoverable
+                        />
+                      )}
+                    </BlockStack>
+                  </FeatureLock>
                 </Box>
               )}
             </Tabs>

@@ -92,7 +92,7 @@ export const action = async ({ request }) => {
 
   // ── Send test email ──
   if (intent === "send-test") {
-    const testEmail     = formData.get("testEmail")     || "";
+    const testEmail     = formData.get("testEmail")     || ""; 
     const templateType  = formData.get("templateType")  || "restock";
     const subjectLine   = formData.get("subjectLine")   || "";
     const bodyHtml      = formData.get("bodyHtml")      || "";
@@ -102,7 +102,6 @@ export const action = async ({ request }) => {
     const headingColor  = formData.get("headingColor")  || "#FFFFFF";
 
     if (!testEmail) return { success: false, error: "Please enter a test email address." };
-
     // Resolve merge tags
     const sampleData = {
       "{{customer_first_name}}": "John",
@@ -372,7 +371,7 @@ export default function EmailTemplatePage() {
 
   return (
     <Page
-      title="Edit Email Template"
+      title={<Text variant="heading2xl" as="h1" fontWeight="bold">📧 Edit Email Template</Text>}
       backAction={{ content: "Dashboard", url: "/app" }}
       primaryAction={{
         content: isSaving ? "Saving…" : "Save Template",

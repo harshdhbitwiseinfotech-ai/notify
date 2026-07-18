@@ -16,7 +16,7 @@ import {
   Divider,
   InlineGrid
 } from "@shopify/polaris";
-import { ChevronUpIcon, ChevronDownIcon } from "@shopify/polaris-icons";
+import { ChevronUpIcon, ChevronDownIcon, LockIcon } from "@shopify/polaris-icons";
 import { Icon } from "@shopify/polaris";
 import {
   LineChart,
@@ -33,6 +33,14 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import { resolvePlanId, getFeaturesForPlan } from "../utils/planLimits";
+
+const FEATURE_LOCK_COLORS = {
+  red: "#ff0000",
+  deepRed: "#d60000",
+  danger: "#b91c1c",
+  bright: "#692eac",
+};
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -46,6 +54,10 @@ export const loader = async ({ request }) => {
     where: { shop },
     orderBy: { createdAt: 'asc' }
   });
+
+  const store = await prisma.store.findUnique({ where: { shop } });
+  const planId = resolvePlanId(store?.plan || "free");
+  const features = getFeaturesForPlan(planId);
 
   // Calculate Restocked Products (unique products that had a notification sent)
   const restockedProductsSet = new Set();
@@ -123,11 +135,64 @@ export const loader = async ({ request }) => {
     avgNotificationTime: 2.4, // placeholder
     trendData,
     productPerformance,
-    conversionData
+    conversionData,
+    features,
   };
 };
 
 const COLORS = ["#008060", "#ee00008e", "#D97706"];
+
+function FeatureLock({ isLocked, title, upgradePlanText, children, borderColor = FEATURE_LOCK_COLORS.red }) {
+  if (!isLocked) return <>{children}</>;
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div style={{ filter: 'blur(3px)', opacity: 0.5, pointerEvents: 'none' }}>
+        {children}
+      </div>
+      <div style={{
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        zIndex: 10,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#ffffff',
+        width: '260px',
+        height: '260px',
+        borderRadius: '50%',
+        border: `4px solid ${borderColor}`,
+        boxShadow: `0 16px 40px ${borderColor}33`,
+        textAlign: 'center',
+        padding: '24px',
+      }}>
+        <div style={{
+          width: '56px',
+          height: '56px',
+          borderRadius: '50%',
+          background: '#fff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: '14px',
+          boxShadow: '0 8px 20px rgba(0,0,0,0.08)',
+        }}>
+          <Icon source={LockIcon} tone="critical" />
+        </div>
+        <Text variant="headingMd" as="h3" style={{ marginBottom: '12px' }}>
+          {title}
+        </Text>
+        <Text variant="bodySm" tone="subdued" as="p" style={{ marginBottom: '16px' }}>
+          Available on {upgradePlanText} plan
+        </Text>
+        <Button onClick={() => window.location.href = '/app/subscription'}>Upgrade</Button>
+      </div>
+    </div>
+  );
+}
 
 const MetricCard = ({ label, value, trend, icon }) => {
   const isPositive = trend >= 0;
@@ -169,7 +234,7 @@ export default function Analytics() {
   const data = useLoaderData();
   const [timeRange, setTimeRange] = useState("week");
 
-  const { trendData, productPerformance, conversionData } = data;
+  const { trendData, productPerformance, conversionData, features } = data;
 
   const handleTimeRangeChange = (value) => {
     setTimeRange(value);
@@ -178,17 +243,19 @@ export default function Analytics() {
   return (
     <Page
       title={
-        <Text variant="headingXl" as="h1">
-          Analytics Dashboard
+        <Text variant="heading2xl" as="h1" fontWeight="bold">
+          📊 Analytics Dashboard
         </Text>
       }
     >
-      <Layout>
-        <Layout.Section>
-          <InlineStack align="space-between" blockAlign="center">
-            <Text as="h4" variant="headingMd">
-              Performance Overview
-            </Text>
+      <div style={{ position: 'relative' }}>
+        <FeatureLock isLocked={!features.analytics} title="Advanced Reports" upgradePlanText="Basic" borderColor={FEATURE_LOCK_COLORS.bright}>
+          <Layout>
+            <Layout.Section>
+              <InlineStack align="space-between" blockAlign="center">
+                <Text as="h4" variant="headingMd">
+                  Performance Overview
+                </Text>
             <Select
               labelInline
               options={[
@@ -354,6 +421,8 @@ export default function Analytics() {
           </InlineStack>
         </Layout.Section>
       </Layout>
+        </FeatureLock>
+      </div>
     </Page>
   );
 }

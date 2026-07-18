@@ -11,22 +11,42 @@ export const PLAN_LIMITS = {
   free: {
     subscribers: 35,
     notifications: 25,
-    features: { analytics: false, customizeWidget: false, editEmailTemplate: false },
+    features: {
+      analytics: false,
+      notificationLog: false,
+      customizeWidget: false,
+      editEmailTemplate: false,
+    },
   },
   basic: {
     subscribers: 500,
     notifications: 1000,
-    features: { analytics: true, customizeWidget: true, editEmailTemplate: false },
+    features: {
+      analytics: true,
+      notificationLog: false,
+      customizeWidget: true,
+      editEmailTemplate: false,
+    },
   },
   pro: {
     subscribers: 5000,
     notifications: 10000,
-    features: { analytics: true, customizeWidget: true, editEmailTemplate: true },
+    features: {
+      analytics: true,
+      notificationLog: true,
+      customizeWidget: true,
+      editEmailTemplate: true,
+    },
   },
   enterprise: {
     subscribers: null, // unlimited
     notifications: null,
-    features: { analytics: true, customizeWidget: true, editEmailTemplate: true },
+    features: {
+      analytics: true,
+      notificationLog: true,
+      customizeWidget: true,
+      editEmailTemplate: true,
+    },
   },
 };
 

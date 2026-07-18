@@ -65,7 +65,7 @@ export const loader = async ({ request }) => {
     const nextMonth = new Date();
     nextMonth.setMonth(nextMonth.getMonth() + 1);
     nextBillingDate = nextMonth.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-    
+
     billingCycleLabel = activeSubscriptionName.includes("Yearly") ? "yearly" : "monthly";
 
     // Map plan → price
@@ -156,8 +156,9 @@ const PLANS = [
       { label: "25 notifications/month", included: true },
       { label: "Email notifications", included: true },
       { label: "Analytics dashboard", included: false },
+      { label: "Recent Notification Activity", included: false },
       { label: "Cutomize widget", included: false },
-      { label: "Edit Emails Templates",included: false },
+      { label: "Edit Emails Templates", included: false },
     ],
     limits: { subscribers: 35, notifications: 25 },
   },
@@ -173,9 +174,10 @@ const PLANS = [
       { label: "Up to 100 subscribers", included: true },
       { label: "1,000 notifications/month", included: true },
       { label: "Email notifications", included: true },
-      { label: "Analytics dashboard", included: true },     
+      { label: "Analytics dashboard", included: true },
+      { label: "Recent Notification Activity", included: false },
       { label: "cutomize widget", included: true },
-      { label: "Edit Emails Templates",included: false },
+      { label: "Edit Emails Templates", included: false },
     ],
     limits: { subscribers: 500, notifications: 1000 },
   },
@@ -192,8 +194,9 @@ const PLANS = [
       { label: "10,000 notifications/month", included: true },
       { label: "Email notifications", included: true },
       { label: "Analytics dashboard", included: true },
+      { label: "Recent Notification Activity", included: true },
       { label: "cutomize widget", included: true },
-      { label: "Edit Emails Templates",included: true },
+      { label: "Edit Emails Templates", included: true },
     ],
     limits: { subscribers: 5000, notifications: 10000 },
   },
@@ -210,8 +213,9 @@ const PLANS = [
       { label: "Unlimited notifications", included: true },
       { label: "Email notifications", included: true },
       { label: "Analytics dashboard", included: true },
+      { label: "Recent Notification Activity", included: true },
       { label: "cutomize widget", included: true },
-      { label: "Edit Emails Templates",included: true },
+      { label: "Edit Emails Templates", included: true },
     ],
     limits: { subscribers: null, notifications: null },
   },
@@ -221,11 +225,11 @@ const PLANS = [
 function FeatureRow({ label, included }) {
   return (
     <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "8px", width: "100%" }}>
-      <div style={{ 
-        display: "flex", 
-        alignItems: "center", 
+      <div style={{
+        display: "flex",
+        alignItems: "center",
         justifyContent: "center",
-        width: 16, 
+        width: 16,
         height: 16,
         borderRadius: "50%",
         background: included ? "#94a3b8" : "transparent",
@@ -255,7 +259,7 @@ function PlanCard({ plan, isCurrentPlan, billingCycle, onSelect }) {
   const price =
     billingCycle === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
   const isFree = price === 0;
-  
+
   const isPro = plan.id === "pro";
 
   return (
@@ -296,7 +300,6 @@ function PlanCard({ plan, isCurrentPlan, billingCycle, onSelect }) {
           {plan.badge}
         </div>
       )}
-
       <div style={{ padding: "32px 24px 24px", display: "flex", flexDirection: "column", flexGrow: 1 }}>
         <BlockStack gap="200">
           <Text as="h3" variant="headingLg" fontWeight="medium">
@@ -340,11 +343,11 @@ function PlanCard({ plan, isCurrentPlan, billingCycle, onSelect }) {
               fontSize: "14px",
               fontWeight: "500",
               cursor: isCurrentPlan ? "default" : "pointer",
-              background: isPro ? "#000" : "#fff",
-              color: isPro ? "#fff" : "#000",
-              border: isPro ? "none" : "1px solid #e2e8f0",
+              background: isCurrentPlan ? "#fff" : "#000000ff",
+              color: isCurrentPlan ? "#000000ff" : "#fff",
+              border: isCurrentPlan ? "1px solid #000000ff" : "none",
               transition: "all 0.2s",
-              opacity: isCurrentPlan && !isPro ? 0.7 : 1,
+              opacity: isCurrentPlan ? 0.7 : 1,
               position: "relative",
               zIndex: 10,
               pointerEvents: "auto",
@@ -430,14 +433,14 @@ export default function Subscription() {
     currentPlan.id === "free"
       ? "$0/mo"
       : currentPlan.billingCycle === "yearly"
-      ? `$${currentPlan.price}/mo (billed yearly)`
-      : `$${currentPlan.price}/mo`;
+        ? `$${currentPlan.price}/mo (billed yearly)`
+        : `$${currentPlan.price}/mo`;
 
   return (
     <Page
       title={
-        <Text variant="headingXl" as="h1">
-          Plans &amp; Billing
+        <Text variant="heading2xl" as="h1" fontWeight="bold">
+          🛡️ Plans &amp; Billing
         </Text>
       }
       primaryAction={
@@ -498,9 +501,9 @@ export default function Subscription() {
             secondaryAction={
               currentPlan.id !== "free"
                 ? {
-                    content: "Cancel plan",
-                    onAction: () => setCancelModal(true),
-                  }
+                  content: "Cancel plan",
+                  onAction: () => setCancelModal(true),
+                }
                 : undefined
             }
           >

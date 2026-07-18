@@ -120,25 +120,22 @@ export default function Products() {
   ));
 
   return (
-    <Page title={<Text variant="headingXl" as="h1">Recent Product Requests</Text>}>
+    <Page title={<Text variant="heading2xl" as="h1" fontWeight="bold">🚨 Notification Dashboard</Text>}>
       <Layout>
         <Layout.Section>
           <Card padding="0">
             <Box padding="400">
               <InlineStack blockAlign="center" align="space-between" gap="400">
                 <BlockStack spacing="tight">
-                  <Text as="h3" variant="headingLg" fontWeight="bold">
-                    Recent product requests
-                  </Text>
                   <Text as="p" variant="bodyMd" tone="subdued" fontWeight="regular">
-                    Browse the latest back-in-stock requests from your store.
+                    Browse the latest back-in-stock requests from your store.....
                   </Text>
                 </BlockStack>
                 <Box width="320px">
                   <TextField
                     label="Search requests"
                     labelHidden
-                    type="search"
+                    type="search" 
                     value={searchText}
                     onChange={setSearchText}
                     clearButton

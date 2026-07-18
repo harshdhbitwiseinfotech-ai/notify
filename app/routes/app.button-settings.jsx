@@ -217,7 +217,7 @@ export default function ButtonSettingsPage() {
 
   return (
     <Page
-      title="Customize Button Design"
+      title={<Text variant="heading2xl" as="h1" fontWeight="bold">🎨 Customize Button Design</Text>}
       subtitle="Design your storefront's 'Notify Me' button."
       backAction={{ content: "Dashboard", url: "/app" }}
       primaryAction={{

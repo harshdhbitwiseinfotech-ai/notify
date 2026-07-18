@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { useNavigate } from "react-router";
 import {
   Icon,
@@ -213,7 +213,7 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
   };
 
   return (
-    <Page title="📦 Notification Dashboard" subtitle={`Store analytics for ${shopName}`}>
+    <Page title={<Text variant="heading2xl" as="h1" fontWeight="bold">🎯 Dashboard</Text>} subtitle={`Store analytics for ${shopName}`}>
       <Layout>
 
         {/* Stat Cards */}
@@ -488,7 +488,7 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
               <FeatureLock isLocked={!features.customizeWidget} title="Customize Widget" upgradePlanText="Basic">
               <Card padding="0">
                 <div style={{ 
-                  backgroundColor: '#f0ededff', 
+                  backgroundColor: 'rgba(245, 205, 74, 0.51)', 
                   padding: '30px', 
                   display: 'flex', 
                   justifyContent: 'center',
@@ -500,14 +500,14 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
                     backgroundColor: '#fff', 
                     padding: '20px 30px', 
                     borderRadius: '8px', 
-                    boxShadow: '0 4px 12px rgba(253, 0, 0, 1)',
+                    boxShadow: '0 4px 12px rgba(27, 168, 233, 0.69)',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '12px',
                     width: '80%'
                   }}>
                     <div style={{ 
-                      background: 'linear-gradient(135deg, #0b3d2c 0%, #1a4fa0 100%)', 
+                      background: 'rgba(92, 127, 161, 0.54)', 
                       padding: '10px', 
                       borderRadius: '4px', 
                       textAlign: 'center', 
@@ -522,7 +522,7 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
                       <Text as="span" variant="bodyMd" fontWeight="bold" tone="textInverse">Notify me</Text>
                     </div>
                     <div style={{ 
-                      border: '1px solid #e1e3e5', 
+                      border: '1px solid rgb(225, 227, 229)', 
                       padding: '10px', 
                       borderRadius: '4px', 
                       textAlign: 'center' 
@@ -551,7 +551,7 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
               <FeatureLock isLocked={!features.editEmailTemplate} title="Email Templates" upgradePlanText="Pro">
               <Card padding="0">
                 <div style={{ 
-                  backgroundColor: '#f0ededff', 
+                  backgroundColor: 'rgba(245, 205, 74, 0.51)', 
                   padding: '30px', 
                   display: 'flex', 
                   justifyContent: 'center',
@@ -560,10 +560,10 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
                   borderTopRightRadius: '8px' 
                 }}>
                   <div style={{ 
-                    backgroundColor: '#fff', 
+                    backgroundColor: '#ffffff', 
                     padding: '30px', 
                     borderRadius: '8px', 
-                    boxShadow: '0 4px 12px rgba(255, 0, 0, 0.81)',
+                    boxShadow: '0 4px 12px rgba(27, 168, 233, 0.69)',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
