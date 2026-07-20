@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useLoaderData, useSubmit, useNavigation } from "react-router";
+import { useLoaderData, useSubmit, useNavigation, useNavigate } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -236,6 +236,7 @@ export default function ButtonSettingsPage() {
   const { settings } = useLoaderData();
   const submit = useSubmit();
   const navigation = useNavigation();
+  const navigate = useNavigate();
   const isSaving = navigation.state === "submitting";
 
   // ── Button Settings state ──
@@ -299,7 +300,7 @@ export default function ButtonSettingsPage() {
     <Page
       title={<Text variant="heading2xl" as="h1" fontWeight="bold">🎨 Customize Button Design</Text>}
       subtitle="Design your storefront's 'Notify Me' button."
-      backAction={{ content: "Dashboard", url: "/app" }}
+      backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
       primaryAction={{
         content: isSaving ? "Saving…" : "Save Settings",
         onAction: handleSave,
@@ -416,7 +417,6 @@ export default function ButtonSettingsPage() {
             </div>
           </InlineGrid>
         </Layout.Section>
-
         {/* ─── Low Stock Widget Section ─── */}
         <Layout.Section>
           <Card>
@@ -425,7 +425,7 @@ export default function ButtonSettingsPage() {
               {/* Header row with toggle */}
               <InlineStack align="space-between" blockAlign="center">
                 <BlockStack gap="100">
-                  <Text as="h2" variant="headingMd">⚠️ Low Stock Alert Widget</Text>
+                  <Text as="h2" variant="headingLg">🛑 Low Stock Alert </Text>
                   <Text as="p" variant="bodySm" tone="subdued">
                     Show a low-stock alert on product pages when inventory falls below your threshold.
                   </Text>
@@ -464,7 +464,6 @@ export default function ButtonSettingsPage() {
                       }
                     />
                   </BlockStack>
-
                   {/* Threshold */}
                   <TextField
                     label="Low Stock Threshold"

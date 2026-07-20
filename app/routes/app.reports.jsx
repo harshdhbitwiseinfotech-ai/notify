@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useMemo } from "react";
-import { useLoaderData } from "react-router";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
+import { useLoaderData, useSubmit, useActionData, useNavigation, useRevalidator } from "react-router";
 import { authenticate } from "../shopify.server";
 import {
   Page,
@@ -43,6 +43,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { resolvePlanId, getFeaturesForPlan } from "../utils/planLimits";
+import PDFReportTemplate from "../components/PDFReportTemplate.jsx";
 
 const FEATURE_LOCK_COLORS = {
   red: "#ff0000",
@@ -58,6 +59,69 @@ function startOfPeriod(daysAgo) {
   d.setHours(0, 0, 0, 0);
   return d;
 }
+
+import { getTransporter } from "../utils/emailService.js";
+
+export const action = async ({ request }) => {
+  const { admin, session } = await authenticate.admin(request);
+  const shop = session.shop;
+  
+  const formData = await request.formData();
+  const actionType = formData.get("actionType");
+
+  if (actionType === "emailPDF") {
+    const pdfBase64 = formData.get("pdfBase64");
+    if (!pdfBase64) return { error: "No PDF data provided" };
+
+    try {
+      // Get shop email
+      const response = await admin.graphql(`
+        query {
+          shop {
+            email
+          }
+        }
+      `);
+      const data = await response.json();
+      const shopEmail = data.data.shop.email;
+
+      // Extract base64 part
+      const base64Data = pdfBase64.replace(/^data:application\/pdf;filename=generated\.pdf;base64,/, "").replace(/^data:image\/.*;base64,/, "").replace(/^data:application\/.*;base64,/, "");
+      
+      let buffer;
+      try {
+        buffer = Buffer.from(base64Data, 'base64');
+      } catch (err) {
+        return { error: "Invalid PDF encoding" };
+      }
+
+      const transporter = await getTransporter();
+      
+      const mailOptions = {
+        from: process.env.SMTP_FROM || '"Back In Stock" <noreply@your-app.com>',
+        to: shopEmail,
+        subject: "Store Subscription & Notifications Performance Report",
+        text: "Please find your attached performance report PDF.",
+        html: "<p>Please find your attached performance report PDF.</p>",
+        attachments: [
+          {
+            filename: "Store_Performance_Report.pdf",
+            content: buffer,
+            contentType: "application/pdf"
+          }
+        ]
+      };
+      
+      await transporter.sendMail(mailOptions);
+      return { success: true, message: "PDF Report emailed to " + shopEmail };
+    } catch (error) {
+      console.error("Failed to email PDF:", error);
+      return { error: "Failed to send email" };
+    }
+  }
+
+  return null;
+};
 
 function relativeTime(date) {
   const diff = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
@@ -353,7 +417,7 @@ function FeatureLock({ isLocked, title, upgradePlanText, children, borderColor =
 
   return (
     <div style={{ position: 'relative' }}>
-      <div style={{ filter: 'blur(3px)', opacity: 0.45, pointerEvents: 'none' }}>
+      <div style={{ filter: 'blur(3px)', opacity: 0.5, pointerEvents: 'none' }}>
         {children}
       </div>
       <div style={{
@@ -365,19 +429,16 @@ function FeatureLock({ isLocked, title, upgradePlanText, children, borderColor =
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        background: '#ffffff',
-        padding: '30px',
-        borderRadius: '20px',
-        border: `4px solid ${borderColor}`,
-        boxShadow: `0 10px 30px ${borderColor}33`,
         minWidth: '260px',
-        textAlign: 'center',
+        textAlign: 'center'
       }}>
+        <div style={{ marginBottom: '8px', fontSize: '24px', lineHeight: '1' }}>
+          🔒
+        </div>
         <Text variant="headingMd" as="h3">{title}</Text>
-        <Text variant="bodyMd" tone="subdued" as="p" style={{ margin: '8px 0 16px' }}>
-          Available on {upgradePlanText} plan
-        </Text>
-        <Button onClick={() => window.location.href = '/app/subscription'}>Upgrade</Button>
+        <div style={{ marginTop: '4px' }}>
+          <Text variant="bodySm" tone="subdued">Available on {upgradePlanText} plan</Text>
+        </div>
       </div>
     </div>
   );
@@ -385,6 +446,67 @@ function FeatureLock({ isLocked, title, upgradePlanText, children, borderColor =
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function Reports() {
+  const submit = useSubmit();
+  const { revalidate, state: revalState } = useRevalidator();
+  const actionData = useActionData();
+  const navigation = useNavigation();
+  
+  useEffect(() => {
+    if (actionData?.success && actionData?.message) {
+      if (typeof shopify !== 'undefined' && shopify.toast) {
+        shopify.toast.show("PDF sent successfully", { isError: false });
+      }
+    } else if (actionData?.error) {
+      if (typeof shopify !== 'undefined' && shopify.toast) {
+        shopify.toast.show("Failed to send PDF", { isError: true });
+      }
+    }
+  }, [actionData]);
+
+  const isEmailing = navigation.state === "submitting" && navigation.formData?.get("actionType") === "emailPDF";
+  
+  const exportPDF = async () => {
+    const { jsPDF } = await import('jspdf');
+    const html2canvas = (await import('html2canvas')).default;
+
+    const pdf = new jsPDF('p', 'px', [800, 1130]); // approximate A4 ratio in px
+    const pdfPages = ['pdf-page-1', 'pdf-page-2', 'pdf-page-3'];
+    
+    // Temporarily show container
+    const container = document.getElementById('pdf-report-container');
+    if (!container) return;
+    container.style.display = 'block';
+    
+    try {
+      for (let i = 0; i < pdfPages.length; i++) {
+        const pageEl = document.getElementById(pdfPages[i]);
+        if (!pageEl) continue;
+        
+        const canvas = await html2canvas(pageEl, { scale: 1 });
+        const imgData = canvas.toDataURL('image/jpeg', 0.7);
+        
+        const imgProps = pdf.getImageProperties(imgData);
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+        
+        if (i > 0) pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+      }
+      
+      const pdfBase64 = pdf.output('datauristring');
+      
+      const formData = new FormData();
+      formData.append("actionType", "emailPDF");
+      formData.append("pdfBase64", pdfBase64);
+      
+      submit(formData, { method: "post" });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      container.style.display = 'none';
+    }
+  };
+
   const {
     reportRows,
     WEEKLY_DATA,
@@ -491,15 +613,30 @@ export default function Reports() {
           📋 Reports
         </Text>
       }
-      primaryAction={
-        <Button icon={ExportIcon} variant="primary">
-          Export CSV
-        </Button>
-      }
+      primaryAction={{
+        content: isEmailing ? "Sending Email..." : "Export Report",
+        icon: ExportIcon,
+        onAction: exportPDF,
+        loading: isEmailing,
+      }}
       secondaryActions={[
-        { content: "Refresh", icon: RefreshIcon, onAction: () => window.location.reload() },
+        { content: "Refresh", icon: RefreshIcon, onAction: () => revalidate(), loading: revalState === "loading" },
       ]}
     >
+      {actionData?.success && (
+        <div style={{ marginBottom: "16px" }}>
+          <Banner title="Report Sent" tone="success">
+            <p>{actionData.message}</p>
+          </Banner>
+        </div>
+      )}
+      {actionData?.error && (
+        <div style={{ marginBottom: "16px" }}>
+          <Banner title="Failed to send report" tone="critical">
+            <p>{actionData.error}</p>
+          </Banner>
+        </div>
+      )}
       <Layout>
         {/* ── Summary Stats ── */}
         <Layout.Section>
@@ -787,20 +924,16 @@ export default function Reports() {
             </Tabs>
           </Card>
         </Layout.Section>
-
-        {/* Footer Actions */}
-        <Layout.Section>
-          <InlineStack gap="300">
-            <Button icon={ExportIcon} variant="primary">
-              Export Full Report (CSV)
-            </Button>
-            <Button icon={EmailIcon}>Email Report</Button>
-            <Button url="/app" variant="plain">
-              ← Back to Dashboard
-            </Button>
-          </InlineStack>
-        </Layout.Section>
       </Layout>
+      <PDFReportTemplate 
+        totalSubscribers={totalSubscribers}
+        totalNotified={totalNotified}
+        reportRows={reportRows}
+        performanceSummary={performanceSummary}
+        chartData={chartData}
+        notificationLog={notificationLog}
+        relativeTime={relativeTime}
+      />
     </Page>
   );
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useLoaderData, useSubmit, useNavigation, useFetcher } from "react-router";
+import { useLoaderData, useSubmit, useNavigation, useFetcher, useNavigate } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -242,6 +242,7 @@ export default function EmailTemplatePage() {
   const { restock, preorder, shop, smtpUser } = useLoaderData();
   const submit       = useSubmit();
   const navigation   = useNavigation();
+  const navigate     = useNavigate();
   const isSaving     = navigation.state === "submitting";
 
   const [selectedType, setSelectedType] = useState("restock");
@@ -372,7 +373,7 @@ export default function EmailTemplatePage() {
   return (
     <Page
       title={<Text variant="heading2xl" as="h1" fontWeight="bold">📧 Edit Email Template</Text>}
-      backAction={{ content: "Dashboard", url: "/app" }}
+      backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
       primaryAction={{
         content: isSaving ? "Saving…" : "Save Template",
         onAction: handleSave,

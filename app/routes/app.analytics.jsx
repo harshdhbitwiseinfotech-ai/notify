@@ -159,36 +159,16 @@ function FeatureLock({ isLocked, title, upgradePlanText, children, borderColor =
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'center',
-        background: '#ffffff',
-        width: '260px',
-        height: '260px',
-        borderRadius: '50%',
-        border: `4px solid ${borderColor}`,
-        boxShadow: `0 16px 40px ${borderColor}33`,
-        textAlign: 'center',
-        padding: '24px',
+        minWidth: '260px',
+        textAlign: 'center'
       }}>
-        <div style={{
-          width: '56px',
-          height: '56px',
-          borderRadius: '50%',
-          background: '#fff',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginBottom: '14px',
-          boxShadow: '0 8px 20px rgba(0,0,0,0.08)',
-        }}>
-          <Icon source={LockIcon} tone="critical" />
+        <div style={{ marginBottom: '8px', fontSize: '24px', lineHeight: '1' }}>
+          🔒
         </div>
-        <Text variant="headingMd" as="h3" style={{ marginBottom: '12px' }}>
-          {title}
-        </Text>
-        <Text variant="bodySm" tone="subdued" as="p" style={{ marginBottom: '16px' }}>
-          Available on {upgradePlanText} plan
-        </Text>
-        <Button onClick={() => window.location.href = '/app/subscription'}>Upgrade</Button>
+        <Text variant="headingMd" as="h3">{title}</Text>
+        <div style={{ marginTop: '4px' }}>
+          <Text variant="bodySm" tone="subdued">Available on {upgradePlanText} plan</Text>
+        </div>
       </div>
     </div>
   );

@@ -16,7 +16,7 @@ dotenv.config();
 let testAccountPromise = null;
 let cachedTransporter = null;
 
-const getTransporter = async () => {
+export const getTransporter = async () => {
   if (cachedTransporter) {
     return cachedTransporter;
   }

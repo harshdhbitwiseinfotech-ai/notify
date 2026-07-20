@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { useNavigate } from "react-router";
 import {
   Icon,
@@ -36,24 +36,16 @@ const FeatureLock = ({ isLocked, title, upgradePlanText, children }) => {
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        background: '#fff',
-        padding: '30px',
-        borderRadius: '50%',
-        border: '4px solid #e32c2b',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-        minWidth: '220px',
-        height: '220px',
-        justifyContent: 'center',
+        minWidth: '260px',
         textAlign: 'center'
       }}>
-        <div style={{ marginBottom: '8px' }}>
-          <Icon source={LockIcon} tone="warning" />
+        <div style={{ marginBottom: '8px', fontSize: '24px', lineHeight: '1' }}>
+          🔒
         </div>
         <Text variant="headingMd" as="h3">{title}</Text>
-        <div style={{ marginTop: '4px', marginBottom: '12px' }}>
+        <div style={{ marginTop: '4px' }}>
           <Text variant="bodySm" tone="subdued">Available on {upgradePlanText} plan</Text>
         </div>
-        <Button onClick={() => window.location.href = '/app/subscription'}>Upgrade</Button>
       </div>
     </div>
   );
@@ -540,7 +532,7 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
                         </Text>
                       </div>
                       <InlineStack gap="300">
-                        <Button onClick={() => navigate("/app/button-settings")}>Customize widget</Button>
+                        <Button variant="primary" onClick={() => navigate("/app/button-settings")}>Customize widget</Button>
                       </InlineStack>
                     </BlockStack>
                   </Box>
@@ -586,7 +578,7 @@ const Dashboard = ({ stats, topProducts = [], recentRequests = [], shopName = "Y
                         </Text>
                       </div>
                       <InlineStack gap="300">
-                        <Button onClick={() => navigate("/app/email-template")}>Edit Email Template</Button>
+                        <Button variant="primary" onClick={() => navigate("/app/email-template")}>Edit Email Template</Button>
                       </InlineStack>
                     </BlockStack>
                   </Box>
